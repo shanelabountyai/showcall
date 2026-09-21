@@ -128,3 +128,35 @@ Overlap and daily-cap checks carried over as written, and so did the row lock
 that makes two concurrent bookings of the same person serialize. The change
 is that capacity is counted per person across events, not per event, so a
 technician on two shows the same day is caught.
+
+## Phase 1 gate: e2e and the demo story (S-6)
+
+**Problem.** Grid edit/publish, staffing refusals and gated GO (S-5) had unit
+coverage only — nothing had opened a browser. And the "keynote moves 15
+minutes" story (P0-2's capstone) has no UI for half of it: cascade
+preview/commit and call-sheet issuing are deliberately backend-only (P0-2's
+write-up), so the story can't be driven end-to-end from the browser alone.
+
+**What it does.** `playwright.config.ts` builds and serves a production
+build on :4000 against `.env.test` (`npm run test:e2e`, with `E2E_DEV=1` as a
+dev-server escape hatch for debugging one spec). One spec, run in order
+against the seeded Northwind Summit: the grid is clean and published;
+overlapping a session blocks publish with the conflict named, and reverting
+clears it; moving the keynote 15 minutes stays clean and publishes v2, which
+leaves live mode's staleness banner correctly lit for the next block; a
+staffing booking past a person's daily cap is refused, named, and one within
+it succeeds; GO is gated to the room's own on-duty stage manager (D-011) and
+recording it flips that row's state. `scripts/demo.ts` (`npm run demo`) is
+the other half: it moves the seeded keynote 15 minutes through the same
+`saveSession`/`publishAgenda` path the grid UI uses, then previews and
+commits the cascade and issues call sheets, narrating exactly what moves and
+which roles' sheets actually change — the backend half of the capstone,
+runnable and readable on its own.
+
+**What it deliberately does not do.** A UI for cascade preview/commit or
+call-sheet issuing (still P0-2's call); CI wiring (the sweep runs locally for
+now).
+
+**Verdict.** Not a producer-review feature; it is the Phase 1 gate. Passing:
+55 vitest tests, 8 e2e specs against a production build, and the demo script
+against the seeded summit, all green.

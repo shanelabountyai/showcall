@@ -12,7 +12,7 @@ prior gate's fixtures or demo story fail.
 | S-3 | Role-filtered call sheets: per-role projection, versioned issues, changed-since-last-issue diff, no-over-disclosure sweep, PDF | ✅ |
 | S-4 | Stage-manager live mode: current/next cue, running offset → projected times (polling) | ✅ |
 | S-5 | P0-8 basics: event/client, staffing assignments with capacity + day-of roles; agenda editing UI; seeded two-day three-track conference; GO gated to the SM (D-011) | ✅ |
-| S-6 | Phase 1 gate: e2e on a production build, demo story (keynote moves 15 min → cascade → filtered re-issues) | ⏳ next |
+| S-6 | Phase 1 gate: e2e on a production build, demo story (keynote moves 15 min → cascade → filtered re-issues) | ✅ |
 
 ## Phase 2–4
 

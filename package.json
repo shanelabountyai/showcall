@@ -18,9 +18,18 @@
     "db:migrate:test": "dotenv -e .env.test -- prisma migrate deploy",
     "db:migrate:all": "npm run db:migrate && npm run db:migrate:test",
     "db:status": "prisma migrate status && dotenv -e .env.test -- prisma migrate status",
-    "db:seed": "dotenv -e .env -- tsx prisma/seed.ts"
+    "db:seed": "dotenv -e .env -- tsx prisma/seed.ts",
+    "db:seed:test": "dotenv -e .env.test -- tsx prisma/seed.ts",
+    "demo": "dotenv -e .env -- tsx scripts/demo.ts",
+    "dev:test": "dotenv -e .env.test -- next dev -p 4000",
+    "build:test": "dotenv -e .env.test -- next build",
+    "start:test": "dotenv -e .env.test -- next start -p 4000",
+    "e2e:server": "npm run build:test && npm run start:test",
+    "pretest:e2e": "npm run db:migrate:test && npm run db:seed:test",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
