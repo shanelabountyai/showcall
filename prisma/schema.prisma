@@ -32,6 +32,7 @@ model Event {
   sessions  Session[]
   versions  AgendaVersion[]
   cues      Cue[]
+  roles     CallRole[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -125,6 +126,47 @@ model Cue {
   eventId        String
   room           Room      @relation(fields: [roomId], references: [id])
   roomId         String
+  roles          CueRole[]
 
   @@index([eventId])
+}
+
+/// A call-sheet audience (D-008): "Florist", "A1 Audio". Cues are tagged to
+/// the roles they concern, and a role's sheet shows exactly those cues.
+model CallRole {
+  id       String           @id @default(cuid())
+  name     String
+  /// Where to report: dock, entrance, contact. Printed on the sheet.
+  reportTo String           @default("")
+  event    Event            @relation(fields: [eventId], references: [id])
+  eventId  String
+  cues     CueRole[]
+  issues   CallSheetIssue[]
+
+  @@unique([eventId, name])
+}
+
+model CueRole {
+  cue    Cue      @relation(fields: [cueId], references: [id], onDelete: Cascade)
+  cueId  String
+  role   CallRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId String
+
+  @@id([cueId, roleId])
+}
+
+/// An issued call sheet. Append-only (trigger), like AgendaVersion: what a
+/// role was sent is kept exactly, and the next issue diffs against it.
+model CallSheetIssue {
+  id            String   @id @default(cuid())
+  number        Int
+  /// The agenda version the run sheet was pinned to; stale when behind (D-003).
+  agendaVersion Int
+  /// The role's projection only — see src/callsheet/callsheet.ts.
+  content       Json
+  issuedAt      DateTime
+  role          CallRole @relation(fields: [roleId], references: [id])
+  roleId        String
+
+  @@unique([roleId, number])
 }

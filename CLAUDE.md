@@ -10,7 +10,8 @@ phase gates: `docs/backlog.md`.
 1. **The agenda is the single source.** Run sheets, call sheets and show
    files are derived; each records the agenda version it was built from, and
    stale means that number is behind `currentAgendaVersion`. Derived artifacts
-   flag stale — they never silently drift.
+   flag stale — they never silently drift. Call sheets are stale by content
+   (D-009): the run sheet is behind, or the projection differs from the last issue.
 2. **Published agenda versions are append-only** (database trigger). Publish
    is refused while the grid has conflicts, with every conflict named.
 3. **Times are minute-of-day on a `LocalDate`** in the event's timezone

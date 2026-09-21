@@ -58,3 +58,31 @@ producers ask for "cocktails fill the gap".
 Cues anchor to sessions as published, so `PublicSession` gained an opaque
 `id`. It is a cuid and reveals nothing; it was added to the projection
 deliberately, as the projection's own comment requires.
+
+## D-008 · 2026-09-21 · Call-sheet audiences are roles; cues are tagged
+
+Shane's pick. Each event has named `CallRole`s ("Florist", "A1 Audio") that carry
+report-to text, and cues are tagged to them many-to-many (`CueRole`). A role's
+sheet is exactly its tagged cues, projected to label, room, day and times.
+A table rather than a tag array on the cue, because a typo would otherwise
+invent a role, and report-to needs somewhere to live. A role rather than a
+person, because people are S-5's staffing model.
+
+- **Call time** is the day's first cue, so it cascades. To call a role
+  earlier, add a load-in cue.
+- **Speakers get no sheet yet.** The published snapshot names speakers but has
+  no ids. That comes with the speaker portal (P0-3).
+- **No PDF route.** Issues and PDFs exist as functions. Tokenised delivery is
+  P1-3, and an unauthenticated per-role URL would be its own disclosure.
+- **PDF** uses the house renderer lifted from rental business (pdf-lib, tagged,
+  Helvetica/WinAnsi). A label outside WinAnsi, such as an emoji, fails to render.
+
+## D-009 · 2026-09-21 · A call sheet is stale by content, not by version number
+
+Each issue records the agenda version its run sheet was pinned to. A sheet is
+**stale** when the run sheet is behind the agenda (nothing can be trusted
+until the rebase) or when its projection no longer matches the last issue.
+Strictly comparing version numbers would flag the florist's sheet forever
+after a keynote move that never touched it, and re-issuing it to clear the
+flag breaks "re-issue exactly the affected sheets". Issuing is refused while
+the run sheet is stale, and an unchanged sheet is never re-issued.

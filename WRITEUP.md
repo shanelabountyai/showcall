@@ -46,3 +46,31 @@ UI (S-4's live mode is the first screen that reads it).
 
 **Verdict.** Not a producer-review feature on its own; it is the substrate for
 the "keynote moves 15 minutes" capstone and for call sheets (S-3).
+
+## Role-filtered call sheets (P0-2)
+
+**Problem.** Everyone on a show needs their own slice of the run sheet: the
+florist needs load-in and strike, audio needs walk-in music and the toast.
+Producers either send everyone the full run of show, which puts the toast order
+in the florist's inbox, or hand-cut a sheet per vendor that goes stale the
+moment the keynote moves.
+
+**What it does.** Cues are tagged to roles. Each role's sheet is an explicit
+projection of the run sheet: its own cues, with label, room, day and times only.
+No sessions, anchors, slack, speakers or other roles' cues. Issues are
+versioned and append-only. Issuing re-sends only the roles whose sheet changed,
+each with a changed-since-last-issue diff (added, removed, moved, report-to).
+It refuses while the run sheet is behind the agenda. The PDF is regenerated
+from the stored issue, so what a role was sent is kept exactly. A sweep
+checks every role's issue and PDF text against every string that belongs to
+anyone else. It was proven by two deliberate leaks, both caught.
+
+**What it deliberately does not do.** Speaker sheets (P0-3), delivery and
+receipt confirmation (P1-3's tokenised portal), per-person sheets (S-5
+staffing), venue dock data (P1 venue profiles). Report-to is free text for now.
+
+**Verdict — producer review ("the florist never sees the toast order"):
+validated, with one change.** The per-role filter held as written. The change
+is to staleness: a version-number rule would re-issue sheets that did not
+change, so a sheet is stale by content (D-009). The keynote-moves-15 fixture
+re-issues exactly audio and the stage manager.
