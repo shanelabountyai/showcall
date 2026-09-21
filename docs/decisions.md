@@ -123,3 +123,21 @@ minutes past a shift's end is not refused mid-show.
   cap). Overlaps and minutes past `maxMinutesPerDay` are refused and named.
   There is no override. Groundwork logs capacity overrides, and one gets added
   here if producers ask to book someone past their cap on purpose.
+
+## D-012 · 2026-09-21 · Phase 2 items run bureau before pipeline, against the PRD's own numbering
+
+The PRD lists P0-3 (pipeline) before P0-4 (bureau), but the pipeline's
+tokenized portal is per-speaker and its distribution builder must check
+consent before packaging an asset — both need the bureau's `Speaker`
+lifecycle/consent fields to already exist. Phase 2 is scoped as S-7 (bureau:
+lifecycle, profile/AV/honorarium, rehearsal slots, consent flags as a gate
+function with its own no-path unit test) → S-8 (portal, versioning,
+validation rules) → S-9 (lock, override, distribution builder — calls S-7's
+gate) → S-10 (chase dashboard, unifying both) → S-11 (gate: e2e + demo).
+
+This keeps CLAUDE.md's hard rule #6 ("no code path distributes an unreleased
+asset") true from the moment distribution exists, rather than bolted on
+after S-9 ships. It also matches the Build Notes' TDD order — conflict
+engine → cascade → validation rules → consent no-path test — since the
+*fixture* proving the gate holds end-to-end lands with S-9, even though the
+gate function itself is written and unit-tested in S-7.

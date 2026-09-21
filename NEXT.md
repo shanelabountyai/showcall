@@ -1,10 +1,12 @@
 # Next
 
-**Phase 1 gate passed (S-6).** e2e on a production build (8 specs, `npm run
-test:e2e`) and the demo story (`npm run demo`) are both green — see
-`WRITEUP.md`'s "Phase 1 gate" entry. `docs/backlog.md` Phase 1 is now all ✅.
+**Phase 2 is scoped** (S-7…S-11 in `docs/backlog.md`), sequenced bureau-first
+against the PRD's own P0-3/P0-4 numbering — reasoning in D-012.
 
-**Next: break Phase 2 into items** (`docs/backlog.md`) — the content
-pipeline (P0-3) and bureau (P0-4). Nothing is scoped yet; that's the first
-step of the next session, same as S-6 was carved out of "Phase 1 gate" at the
-end of S-5.
+**Next: S-7 — speaker bureau.** Lifecycle state machine
+(`invited→confirmed→contracted→content_complete→rehearsed→showed→released`),
+profile/AV/honorarium fields on `Speaker`, rehearsal slots reusing the
+existing conflict engine, and release/consent flags exposed as a gate
+function with its own no-path unit test (nothing to gate yet — S-9's
+distribution builder calls it later). Model: Opus plans, Sonnet builds
+(D-005's split), same as every prior item.
