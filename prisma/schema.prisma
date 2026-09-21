@@ -1,0 +1,94 @@
+// Showcall — Showcall Productions event operations. Synthetic data only.
+//
+// Times are minute-of-day on a local date in the event's timezone: a run
+// sheet is "9:05 in Ballroom A on day 2", never an instant, so no DST change
+// or server timezone can move a cue. Range checks live in the init migration.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Client {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  events Event[]
+}
+
+model Event {
+  id        String          @id @default(cuid())
+  name      String
+  timezone  String
+  startDate DateTime        @db.Date
+  endDate   DateTime        @db.Date
+  client    Client          @relation(fields: [clientId], references: [id])
+  clientId  String
+  rooms     Room[]
+  speakers  Speaker[]
+  sessions  Session[]
+  versions  AgendaVersion[]
+}
+
+/// Turnover between two sessions in a room is strike + reset.
+model Room {
+  id            String    @id @default(cuid())
+  name          String
+  strikeMinutes Int       @default(0)
+  resetMinutes  Int       @default(0)
+  event         Event     @relation(fields: [eventId], references: [id])
+  eventId       String
+  sessions      Session[]
+
+  @@unique([eventId, name])
+}
+
+model Speaker {
+  id       String           @id @default(cuid())
+  name     String
+  event    Event            @relation(fields: [eventId], references: [id])
+  eventId  String
+  sessions SessionSpeaker[]
+}
+
+/// The draft grid. Edits are free; only a conflict-free grid publishes.
+model Session {
+  id       String           @id @default(cuid())
+  title    String
+  day      DateTime         @db.Date
+  startMin Int
+  endMin   Int
+  event    Event            @relation(fields: [eventId], references: [id])
+  eventId  String
+  room     Room             @relation(fields: [roomId], references: [id])
+  roomId   String
+  speakers SessionSpeaker[]
+
+  @@index([eventId, day])
+}
+
+model SessionSpeaker {
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  speaker   Speaker @relation(fields: [speakerId], references: [id])
+  speakerId String
+
+  @@id([sessionId, speakerId])
+}
+
+/// Append-only (a trigger refuses UPDATE and DELETE). Downstream artifacts
+/// record the version they were built from; stale is that number being behind.
+model AgendaVersion {
+  id          String   @id @default(cuid())
+  number      Int
+  /// The public-safe projection only — see src/agenda/publish.ts.
+  snapshot    Json
+  publishedAt DateTime
+  event       Event    @relation(fields: [eventId], references: [id])
+  eventId     String
+
+  @@unique([eventId, number])
+}
