@@ -20,3 +20,14 @@ export const shortDay = (d: LocalDate) => shortFmt.format(toDbDate(d));
 
 /** 545 → '9:05'. */
 export const hhmm = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+
+const partsFmt = new Map<string, Intl.DateTimeFormat>();
+/** An instant (from the injected clock) as the venue's wall clock: day and minute-of-day. */
+export function localNow(at: Date, timeZone: string): { day: LocalDate; min: number } {
+  let fmt = partsFmt.get(timeZone);
+  if (!fmt) partsFmt.set(timeZone, fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }));
+  const p = Object.fromEntries(fmt.formatToParts(at).map((x) => [x.type, x.value]));
+  return { day: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) * 60 + Number(p.minute) };
+}

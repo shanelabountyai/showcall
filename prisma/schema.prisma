@@ -33,6 +33,7 @@ model Event {
   versions  AgendaVersion[]
   cues      Cue[]
   roles     CallRole[]
+  marks     LiveMark[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -47,6 +48,7 @@ model Room {
   eventId       String
   sessions      Session[]
   cues          Cue[]
+  marks         LiveMark[]
 
   @@unique([eventId, name])
 }
@@ -169,4 +171,25 @@ model CallSheetIssue {
   roleId        String
 
   @@unique([roleId, number])
+}
+
+/// Stage-manager live mode: a GO on a run-sheet row, stamped from the clock.
+/// Append-only (trigger) — the show's actual timeline, never a cue edit. The
+/// running offset derives from it (src/live/live.ts); a wrong GO is corrected
+/// by the next GO, and the log keeps both for planned-vs-actual (P1-5).
+model LiveMark {
+  id         String   @id @default(cuid())
+  /// A session id from the agenda snapshot, or a cue id — same as Cue.anchorId.
+  rowId      String
+  day        DateTime @db.Date
+  /// The row's planned start when GO was called; the offset is actual − planned.
+  plannedMin Int
+  actualMin  Int
+  markedAt   DateTime
+  event      Event    @relation(fields: [eventId], references: [id])
+  eventId    String
+  room       Room     @relation(fields: [roomId], references: [id])
+  roomId     String
+
+  @@index([eventId, day])
 }

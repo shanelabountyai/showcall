@@ -1,7 +1,6 @@
 # Next
 
-**S-4 — stage-manager live mode** (`docs/backlog.md`). Current/next cue and a
-running late/early offset propagating to projected times, via polling. Reads
-`loadRunSheet` (`src/runsheet/cascade.ts`); "now" comes from the injected
-clock (`src/clock.ts`). Decide first where the running offset lives. It is
-live state, not a cue edit, so it must never write through the cascade.
+**S-5 — P0-8 basics** (`docs/backlog.md`): event/client, staffing assignments
+with capacity and day-of roles, agenda editing UI, and a seeded two-day
+three-track conference. The seed should include GO marks so live mode has
+something to show. Gate GO to the SM's day-of role (D-010).

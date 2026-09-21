@@ -74,3 +74,26 @@ validated, with one change.** The per-role filter held as written. The change
 is to staleness: a version-number rule would re-issue sheets that did not
 change, so a sheet is stale by content (D-009). The keynote-moves-15 fixture
 re-issues exactly audio and the stage manager.
+
+## Stage-manager live mode (P0-2)
+
+**Problem.** On show day, the run sheet is a plan, and the room is always a
+few minutes off it. The stage manager needs to know what is up now, what is
+next, and when the next thing will actually happen. They need that without
+editing the plan, because editing it re-cascades and re-issues every call sheet.
+
+**What it does.** `/events/:id/live` shows each room's current and next row
+and how late or early the room is running, with a projected time beside every
+planned one. It polls every five seconds. GO on a row appends a mark stamped
+from the server clock. The offset derives from the latest mark, and from the
+clock once the next row is overdue (D-010). The run sheet and cues are never
+written, and a test asserts the run sheet is identical before and after a GO.
+
+**What it deliberately does not do.** Slack absorbing an overrun, offsets
+crossing rooms, auth on GO (S-5 day-of roles), push updates (polling is the
+spec), or the planned-vs-actual report (P1-5, which reads this log).
+
+**Verdict — producer review ("running late propagates to projected times"):
+validated, with one change.** Instead of a hand-set offset, the stage manager
+calls GO and the offset derives from it, so a hand-set number cannot go stale.
+The overdue rule means a room that has not called GO still shows as late.

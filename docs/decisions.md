@@ -86,3 +86,22 @@ Strictly comparing version numbers would flag the florist's sheet forever
 after a keynote move that never touched it, and re-issuing it to clear the
 flag breaks "re-issue exactly the affected sheets". Issuing is refused while
 the run sheet is stale, and an unchanged sheet is never re-issued.
+
+## D-010 · 2026-09-21 · The running offset derives from an append-only GO log
+
+Shane's pick. The stage manager calls GO on a run-sheet row, which appends a
+`LiveMark` (row, room, planned start, actual minute from the clock). Nothing
+stores an offset. Per room, for today only, the offset is the latest GO's
+actual minus planned start. Once the next row is overdue, it rises to now
+minus that row's planned start, so a cue that has not gone yet is at least
+that late. Projected time is planned + offset for every row after the current
+one. No cue is ever written, so live mode cannot move the run sheet or the
+call sheets built from it.
+
+- **A wrong GO is corrected by the next GO**, because the latest one wins. The
+  log keeps both, which is the planned-vs-actual record P1-5 needs.
+- **Offsets are per room**, because tracks run independently. The offset does
+  not propagate across rooms or through anchors, and slack does not absorb it.
+  Add absorption if SMs ask for "lunch soaks up the overrun".
+- **No auth on GO.** The app has no users yet. Day-of roles arrive with S-5
+  staffing, and GO should be gated to the SM there.
