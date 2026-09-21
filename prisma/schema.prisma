@@ -34,6 +34,7 @@ model Event {
   cues      Cue[]
   roles     CallRole[]
   marks     LiveMark[]
+  staffing  Assignment[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -49,6 +50,7 @@ model Room {
   sessions      Session[]
   cues          Cue[]
   marks         LiveMark[]
+  staffing      Assignment[]
 
   @@unique([eventId, name])
 }
@@ -186,10 +188,50 @@ model LiveMark {
   plannedMin Int
   actualMin  Int
   markedAt   DateTime
+  /// Who called it — the stage manager on duty for the room (D-011).
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  staffId    String
   event      Event    @relation(fields: [eventId], references: [id])
   eventId    String
   room       Room     @relation(fields: [roomId], references: [id])
   roomId     String
 
+  @@index([eventId, day])
+}
+
+/// A Showcall Productions staffer. Capacity is minutes on shift per day,
+/// across every event (Groundwork's crew-day cap): a second show the same day
+/// counts against the same person.
+model Staff {
+  id               String       @id @default(cuid())
+  name             String       @unique
+  maxMinutesPerDay Int          @default(720)
+  assignments      Assignment[]
+  marks            LiveMark[]
+}
+
+enum DayRole {
+  producer
+  stage_manager
+  technical_director
+  crew
+}
+
+/// A day-of role: who works which event, which day, when, and where. A null
+/// room is event-wide. Overlaps and over-capacity are refused (src/staffing).
+model Assignment {
+  id       String   @id @default(cuid())
+  day      DateTime @db.Date
+  startMin Int
+  endMin   Int
+  role     DayRole
+  staff    Staff    @relation(fields: [staffId], references: [id])
+  staffId  String
+  event    Event    @relation(fields: [eventId], references: [id])
+  eventId  String
+  room     Room?    @relation(fields: [roomId], references: [id])
+  roomId   String?
+
+  @@index([staffId, day])
   @@index([eventId, day])
 }

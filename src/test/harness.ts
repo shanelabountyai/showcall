@@ -31,3 +31,7 @@ export async function makeSession(eventId: string, roomId: string, day: LocalDat
     },
   });
 }
+
+export async function makeStaff(maxMinutesPerDay = 720) {
+  return prisma.staff.create({ data: { name: `Staff ${++n}`, maxMinutesPerDay } });
+}

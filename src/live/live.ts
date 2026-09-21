@@ -1,6 +1,7 @@
 import type { Clock } from '../clock';
 import { prisma } from '../db';
 import { loadRunSheet, type RunSheetRow } from '../runsheet/cascade';
+import { stageManagersOnDuty } from '../staffing/staffing';
 import { localNow, toDbDate } from '../time';
 
 /**
@@ -62,13 +63,22 @@ export async function liveShow(eventId: string, clock: Clock) {
   return { eventName: event.name, day: now.day, nowMin: now.min, stale: sheet.stale, rooms };
 }
 
-/** GO on a row of today's run sheet, at the clock's minute. Refused for any other row. */
-export async function markGo(eventId: string, rowId: string, clock: Clock) {
+/** A GO from someone who is not the room's stage manager today. Nothing was logged. */
+export class GoRefused extends Error {}
+
+/**
+ * GO on a row of today's run sheet, at the clock's minute, by `staffId`.
+ * Refused for any other row, and for anyone not assigned stage manager of
+ * that room (or event-wide) today (D-011).
+ */
+export async function markGo(eventId: string, rowId: string, staffId: string, clock: Clock) {
   const { event, now, rows } = await today(eventId, clock);
   const row = rows.find((r) => r.id === rowId);
-  if (!row) throw new Error(`No row ${rowId} on today's run sheet`);
+  if (!row) throw new GoRefused(`No row ${rowId} on today's run sheet`);
   const room = event.rooms.find((r) => r.name === row.room)!;
+  const onDuty = await stageManagersOnDuty(eventId, now.day, room.id);
+  if (!onDuty.some((a) => a.staffId === staffId)) throw new GoRefused(`Only the stage manager on duty in ${room.name} today can call GO`);
   return prisma.liveMark.create({
-    data: { eventId, roomId: room.id, rowId, day: toDbDate(now.day), plannedMin: row.startMin, actualMin: now.min, markedAt: clock.now() },
+    data: { eventId, roomId: room.id, staffId, rowId, day: toDbDate(now.day), plannedMin: row.startMin, actualMin: now.min, markedAt: clock.now() },
   });
 }

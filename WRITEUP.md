@@ -97,3 +97,34 @@ spec), or the planned-vs-actual report (P1-5, which reads this log).
 validated, with one change.** Instead of a hand-set offset, the stage manager
 calls GO and the offset derives from it, so a hand-set number cannot go stale.
 The overdue rule means a room that has not called GO still shows as late.
+
+## Supporting spine: events, staffing, grid editing (P0-8 basics)
+
+**Problem.** Phase 1 needs a show to run: an event under a client, people
+assigned to it for the day, a way to edit the agenda without writing SQL, and
+a conference big enough to show the whole system working. Live mode also
+needed an answer to "who is allowed to call GO?"
+
+**What it does.** Events are created under a client, which is matched by name
+and created if new. The draft grid page edits sessions freely, lists every
+conflict, and publishes only when the grid is clean. It refuses only what
+cannot belong to the event at all: another event's room or speaker, or a day
+outside the event. Staffing assigns day-of roles (producer, stage manager,
+technical director, crew) to a room or event-wide. A booking is refused when
+it overlaps the person's other shifts, or runs them past their daily cap,
+counted across every event. GO is refused for anyone who is not the room's
+stage manager that day (D-011). `npm run db:seed` builds the Northwind
+Leadership Summit: two days, three tracks, 28 sessions, cues tagged to three
+call roles with sheets issued, eight staff, and GO marks for every row already
+due today. Day 1 is always today, so live mode is mid-show.
+
+**What it deliberately does not do.** Login (D-011: identity is picked, not
+proven). Capacity overrides. Editing rooms, speakers or staff in the UI (the
+seed provides them). Registration, budget, vendor compliance and venue
+profiles, which are the rest of P0-8 and belong to later phases.
+
+**Verdict — Groundwork crew model reuse: validated, with one change.**
+Overlap and daily-cap checks carried over as written, and so did the row lock
+that makes two concurrent bookings of the same person serialize. The change
+is that capacity is counted per person across events, not per event, so a
+technician on two shows the same day is caught.

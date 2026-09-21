@@ -31,3 +31,20 @@ export function localNow(at: Date, timeZone: string): { day: LocalDate; min: num
   const p = Object.fromEntries(fmt.formatToParts(at).map((x) => [x.type, x.value]));
   return { day: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) * 60 + Number(p.minute) };
 }
+
+/** '09:05' (an `<input type="time">` value) → 545. */
+export const fromHhmm = (s: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) throw new Error(`Not a time: ${s}`);
+  return Number(m[1]) * 60 + Number(m[2]);
+};
+
+/** 545 → '09:05', for an `<input type="time">`. */
+export const inputTime = (min: number) => hhmm(min).padStart(5, '0');
+
+/** Every day from `start` to `end` inclusive. */
+export function daysBetween(start: LocalDate, end: LocalDate): LocalDate[] {
+  const days: LocalDate[] = [];
+  for (let t = toDbDate(start).getTime(); t <= toDbDate(end).getTime(); t += 86_400_000) days.push(fromDbDate(new Date(t)));
+  return days;
+}

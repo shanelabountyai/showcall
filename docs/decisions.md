@@ -105,3 +105,21 @@ call sheets built from it.
   Add absorption if SMs ask for "lunch soaks up the overrun".
 - **No auth on GO.** The app has no users yet. Day-of roles arrive with S-5
   staffing, and GO should be gated to the SM there.
+
+## D-011 · 2026-09-21 · GO is gated to the room's stage manager by assignment, not by login
+
+Closes D-010's "no auth on GO". A GO names who called it (`LiveMark.staffId`),
+and `markGo` refuses anyone without a `stage_manager` assignment for this
+event, today, on that room or event-wide (a null room is a show caller over
+every room). The check is on the day, not the shift window, so a GO a few
+minutes past a shift's end is not refused mid-show.
+
+- **This is not authentication.** The app still has no users. `?as=` on the
+  live page picks who is calling from today's on-duty stage managers, and GO
+  shows only in that person's rooms. The gate is structural: no code path
+  logs a GO for someone who is not on duty for the room. A login binds the
+  identity when the app gets users, and the check stays the same.
+- **Capacity belongs to the person, across events** (Groundwork's crew-day
+  cap). Overlaps and minutes past `maxMinutesPerDay` are refused and named.
+  There is no override. Groundwork logs capacity overrides, and one gets added
+  here if producers ask to book someone past their cap on purpose.

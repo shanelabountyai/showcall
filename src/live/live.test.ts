@@ -3,8 +3,9 @@ import { publishAgenda } from '../agenda/publish';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
 import { addCue, commitCascade, loadRunSheet, previewCascade, type RunSheetRow } from '../runsheet/cascade';
-import { makeEvent, makeSession, resetDb } from '../test/harness';
-import { liveShow, markGo, projectLive } from './live';
+import { assign } from '../staffing/staffing';
+import { makeEvent, makeSession, makeStaff, resetDb } from '../test/harness';
+import { GoRefused, liveShow, markGo, projectLive } from './live';
 
 const D1 = '2026-10-13';
 const row = (id: string, room: string, startMin: number, endMin = startMin + 30): RunSheetRow =>
@@ -65,13 +66,15 @@ describe('live mode against the database', () => {
     await commitCascade(event.id, { rebase: true }, p.moved);
     const blank = { durationMin: 5, day: null, startMin: null, anchorEdge: null, offsetMin: 0, endById: null, endByEdge: null, endByOffsetMin: 0 } as const;
     const lectern = await addCue(event.id, ballroom.id, { ...blank, label: 'Lectern mic swap', anchorId: keynote.id, anchorEdge: 'end' });
-    return { event, keynote, lectern };
+    const sm = await makeStaff();
+    await assign({ staffId: sm.id, eventId: event.id, roomId: ballroom.id, day: D1, startMin: 420, endMin: 1080, role: 'stage_manager' });
+    return { event, ballroom, keynote, lectern, sm };
   }
 
   it('stamps GO from the clock on the venue wall clock and projects from it', async () => {
-    const { event, keynote, lectern } = await show();
+    const { event, keynote, lectern, sm } = await show();
     const clock = fixedClock('2026-10-13T14:06:30Z'); // 9:06 in Chicago
-    const mark = await markGo(event.id, keynote.id, clock);
+    const mark = await markGo(event.id, keynote.id, sm.id, clock);
     expect(mark).toMatchObject({ plannedMin: 540, actualMin: 546 });
 
     clock.advance(10 * 60_000);
@@ -81,24 +84,45 @@ describe('live mode against the database', () => {
   });
 
   it('writes no cue: the run sheet is identical before and after a GO', async () => {
-    const { event, keynote } = await show();
+    const { event, keynote, sm } = await show();
     const before = await loadRunSheet(event.id);
     const cues = await prisma.cue.findMany({ where: { eventId: event.id } });
-    await markGo(event.id, keynote.id, fixedClock('2026-10-13T14:20:00Z'));
+    await markGo(event.id, keynote.id, sm.id, fixedClock('2026-10-13T14:20:00Z'));
     expect(await loadRunSheet(event.id)).toEqual(before);
     expect(await prisma.cue.findMany({ where: { eventId: event.id } })).toEqual(cues);
   });
 
   it('refuses GO on a row that is not on today’s run sheet', async () => {
-    const { event, keynote } = await show();
-    await expect(markGo(event.id, keynote.id, fixedClock('2026-10-14T14:00:00Z'))).rejects.toThrow(/today's run sheet/);
-    await expect(markGo(event.id, 'nope', fixedClock('2026-10-13T14:00:00Z'))).rejects.toThrow(/today's run sheet/);
+    const { event, keynote, sm } = await show();
+    await expect(markGo(event.id, keynote.id, sm.id, fixedClock('2026-10-14T14:00:00Z'))).rejects.toThrow(/today's run sheet/);
+    await expect(markGo(event.id, 'nope', sm.id, fixedClock('2026-10-13T14:00:00Z'))).rejects.toThrow(/today's run sheet/);
   });
 
   it('the GO log is append-only', async () => {
-    const { event, keynote } = await show();
-    const mark = await markGo(event.id, keynote.id, fixedClock('2026-10-13T14:00:00Z'));
+    const { event, keynote, sm } = await show();
+    const mark = await markGo(event.id, keynote.id, sm.id, fixedClock('2026-10-13T14:00:00Z'));
     await expect(prisma.liveMark.update({ where: { id: mark.id }, data: { actualMin: 540 } })).rejects.toThrow();
     await expect(prisma.liveMark.delete({ where: { id: mark.id } })).rejects.toThrow();
+  });
+
+  it('only the stage manager on duty for the room that day can call GO', async () => {
+    const { event, ballroom, keynote, sm } = await show();
+    const at9 = fixedClock('2026-10-13T14:00:00Z');
+    const salon = await prisma.room.create({ data: { eventId: event.id, name: 'Salon B' } });
+    const [crew, otherSm, tomorrowSm, showCaller] = await Promise.all([makeStaff(), makeStaff(), makeStaff(), makeStaff()]);
+    const shift = { eventId: event.id, startMin: 420, endMin: 1080 };
+    await assign({ ...shift, staffId: crew.id, roomId: ballroom.id, day: D1, role: 'crew' });
+    await assign({ ...shift, staffId: otherSm.id, roomId: salon.id, day: D1, role: 'stage_manager' });
+    await assign({ ...shift, staffId: tomorrowSm.id, roomId: ballroom.id, day: '2026-10-14', role: 'stage_manager' });
+    await assign({ ...shift, staffId: showCaller.id, roomId: null, day: D1, role: 'stage_manager' });
+
+    for (const who of [crew, otherSm, tomorrowSm]) {
+      await expect(markGo(event.id, keynote.id, who.id, at9)).rejects.toThrow(GoRefused);
+    }
+    await expect(markGo(event.id, keynote.id, 'nobody', at9)).rejects.toThrow(/stage manager on duty in Ballroom A/);
+    expect(await prisma.liveMark.count()).toBe(0);
+
+    expect(await markGo(event.id, keynote.id, sm.id, at9)).toMatchObject({ staffId: sm.id });
+    expect(await markGo(event.id, keynote.id, showCaller.id, at9)).toMatchObject({ staffId: showCaller.id }); // event-wide
   });
 });
