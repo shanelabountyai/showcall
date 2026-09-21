@@ -36,3 +36,25 @@ allowed; walking time between rooms is the producer's call.
 
 Phase 1 runs on `opusplan` (Shane's pick): Opus plans the engines, Sonnet
 builds.
+
+## D-006 · 2026-09-21 · Cue times derive; only anchors are stored
+
+A cue is fixed (`day` + `startMin`) or anchored to a session or cue edge plus
+an offset, with an optional end-by anchor for slack. No derived time is ever
+written, so nothing can drift from its anchor. The run sheet pins the agenda
+version it resolves against (`Event.runSheetVersion`, one pin per event — the
+agenda is versioned per event). A change is `rebase` and/or cue edits; preview
+is the same transaction rolled back, and commit refuses on any problem or if
+it would move anything other than what the preview showed. So the stored
+graph is always clean against its pin, and a rebase that compresses a cue has
+to land together with the edit that fixes it.
+
+Compression is modelled as end-by (fixed duration, deadline, slack), not as a
+stretchable cue between two anchors. Add a min-duration stretch cue if
+producers ask for "cocktails fill the gap".
+
+## D-007 · 2026-09-21 · The public snapshot carries session ids
+
+Cues anchor to sessions as published, so `PublicSession` gained an opaque
+`id`. It is a cuid and reveals nothing; it was added to the projection
+deliberately, as the projection's own comment requires.

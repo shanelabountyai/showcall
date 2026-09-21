@@ -22,3 +22,27 @@ past midnight, auto-resolution. It names conflicts; people fix them.
 **Verdict — producer review #4 (agenda as the spine): validated.** Turnover
 as per-room data was a one-line addition to the engine and catches the
 conflict spreadsheets miss most.
+
+## Cue graph and cascade (P0-2, run sheet)
+
+**Problem.** A run sheet is a web of "because": doors are 30 minutes before
+the keynote, the reset starts when strike ends and has to be done before the
+panel. Move the keynote 15 minutes in a spreadsheet and someone retypes every
+dependent time, and the one they miss is the one that breaks on show day.
+
+**What it does.** Cues store anchors, never times: `resolveCues` is a pure
+function that derives every cue from its chain and names four problems —
+anchor loops, anchors cut from the agenda, cues pushed off the day, and
+impossible compression (a cue that can no longer finish by its end-by, with
+the minutes short). The run sheet records the agenda version it was built
+from; a new publish makes it stale. Rebasing previews the whole cascade
+(every session and cue that moves, from → to) and commits it atomically,
+refusing any change that leaves a problem or that no longer matches what was
+previewed. A compression and the fix for it commit as one change.
+
+**What it deliberately does not do.** Stretch cues that fill a gap, walking
+or crew-rule constraints (P1-1), auto-resolving a compression, a run-sheet
+UI (S-4's live mode is the first screen that reads it).
+
+**Verdict.** Not a producer-review feature on its own; it is the substrate for
+the "keynote moves 15 minutes" capstone and for call sheets (S-3).

@@ -13,8 +13,9 @@ export class PublishBlocked extends Error {
 /**
  * What the public agenda may show. An explicit projection, so a field added
  * to Session (AV notes, speaker phone numbers) stays private until added here.
+ * `id` is an opaque key so run-sheet cues can anchor to a session as published.
  */
-export type PublicSession = { title: string; day: LocalDate; room: string; startMin: number; endMin: number; speakers: string[] };
+export type PublicSession = { id: string; title: string; day: LocalDate; room: string; startMin: number; endMin: number; speakers: string[] };
 
 /** The event's draft grid, in the shape the conflict engine reads. */
 export async function loadGrid(eventId: string) {
@@ -45,7 +46,7 @@ export async function publishAgenda(eventId: string, clock: Clock) {
 
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
   const snapshot: PublicSession[] = sessions.map((s) => ({
-    title: s.title, day: s.day, room: roomName.get(s.roomId)!, startMin: s.startMin, endMin: s.endMin,
+    id: s.id, title: s.title, day: s.day, room: roomName.get(s.roomId)!, startMin: s.startMin, endMin: s.endMin,
     speakers: s.speakers.map((p) => p.name).sort(),
   }));
   const last = await prisma.agendaVersion.findFirst({ where: { eventId }, orderBy: { number: 'desc' }, select: { number: true } });

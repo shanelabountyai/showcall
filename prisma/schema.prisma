@@ -31,6 +31,9 @@ model Event {
   speakers  Speaker[]
   sessions  Session[]
   versions  AgendaVersion[]
+  cues      Cue[]
+  /// The agenda version the run sheet is built from; stale when behind (D-003).
+  runSheetVersion Int         @default(0)
 }
 
 /// Turnover between two sessions in a room is strike + reset.
@@ -42,6 +45,7 @@ model Room {
   event         Event     @relation(fields: [eventId], references: [id])
   eventId       String
   sessions      Session[]
+  cues          Cue[]
 
   @@unique([eventId, name])
 }
@@ -91,4 +95,36 @@ model AgendaVersion {
   eventId     String
 
   @@unique([eventId, number])
+}
+
+enum Edge {
+  start
+  end
+}
+
+/// A run-sheet cue. Its time is never stored: it is fixed (day + startMin) or
+/// anchored to a session or another cue's edge plus an offset, and derives
+/// from there (src/runsheet/cues.ts). Shape rules live in the migration.
+model Cue {
+  id             String    @id @default(cuid())
+  label          String
+  durationMin    Int
+  day            DateTime? @db.Date
+  startMin       Int?
+  /// A session id from the agenda snapshot, or a cue id. No foreign key:
+  /// sessions are referenced as published, and a vanished anchor is a
+  /// problem the cascade names rather than a row the database deletes.
+  anchorId       String?
+  anchorEdge     Edge?
+  offsetMin      Int       @default(0)
+  /// Optional "must end by" — the cue's slack is measured against it.
+  endById        String?
+  endByEdge      Edge?
+  endByOffsetMin Int       @default(0)
+  event          Event     @relation(fields: [eventId], references: [id])
+  eventId        String
+  room           Room      @relation(fields: [roomId], references: [id])
+  roomId         String
+
+  @@index([eventId])
 }
