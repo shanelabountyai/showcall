@@ -38,6 +38,7 @@ model Event {
   sponsors     Sponsor[]
   deliverables Deliverable[]
   rules        ValidationRule[]
+  packages     DistributionPackage[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -54,6 +55,7 @@ model Room {
   cues          Cue[]
   marks         LiveMark[]
   staffing      Assignment[]
+  packages      DistributionPackage[]
 
   @@unique([eventId, name])
 }
@@ -321,6 +323,7 @@ model Deliverable {
   sponsor   Sponsor?         @relation(fields: [sponsorId], references: [id])
   sponsorId String?
   versions  ContentVersion[]
+  locks     ShowFileLock[]
 
   @@index([eventId])
 }
@@ -341,6 +344,7 @@ model ContentVersion {
   uploadedAt    DateTime
   runs          ValidationRun[]
   comments      VersionComment[]
+  locks         ShowFileLock[]
 
   @@unique([deliverableId, number])
 }
@@ -402,4 +406,51 @@ model VersionComment {
   at              DateTime
 
   @@index([versionId])
+}
+
+enum LockKind {
+  approve
+  override
+}
+
+/// Which version is the show file (D-016). Append-only (trigger); the latest
+/// row (highest number) wins. Lock 1 is the approve, every later one an override with a reason.
+model ShowFileLock {
+  id            String         @id @default(cuid())
+  number        Int
+  deliverable   Deliverable    @relation(fields: [deliverableId], references: [id])
+  deliverableId String
+  version       ContentVersion @relation(fields: [versionId], references: [id])
+  versionId     String
+  kind          LockKind
+  reason        String         @default("")
+  at            DateTime
+
+  @@unique([deliverableId, number])
+}
+
+enum Audience {
+  room
+  attendees
+}
+
+/// A built playback (room) or post-show (attendees) package (D-016).
+/// Append-only (trigger). Stale when the manifest built now has another checksum.
+model DistributionPackage {
+  id            String   @id @default(cuid())
+  audience      Audience
+  number        Int
+  /// The agenda version the running order was read from.
+  agendaVersion Int
+  manifest      Json
+  /// SHA-256 of the manifest's canonical JSON.
+  sha256        String
+  builtAt       DateTime
+  event         Event    @relation(fields: [eventId], references: [id])
+  eventId       String
+  /// Set for a room package, null for attendees (CHECK in the migration).
+  room          Room?    @relation(fields: [roomId], references: [id])
+  roomId        String?
+
+  @@index([eventId, audience, roomId])
 }

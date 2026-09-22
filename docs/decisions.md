@@ -210,3 +210,54 @@ unreachable until S-9's approval exists. S-9 can move it back once an
 approval resolves a review. Also: with several deck deliverables, the guard
 requires *every* deck's latest version to have passed, not just the most
 recent upload.
+
+## D-016 · 2026-09-22 · Show-file lock, override, and two kinds of package
+
+Shane's picks, for S-9.
+
+**Lock is an append-only pointer, not a flag on a version.** `ShowFileLock`
+rows say which version of a deliverable is the show file; the latest row wins.
+The first is an *approve* (latest version only, refused if its validation
+failed — an approval resolves *needs review*); every later one is an
+*override*, which needs a reason and re-runs the event's current rules as a
+new `ValidationRun` beside the old ones. **A failed re-validation refuses the
+override** (Shane's pick): the lock stays where it was and the run stays in
+the log with its fix list. A late upload through the portal is accepted as a
+new version as before; it just does not become the show file until a producer
+overrides. Versions were already immutable (S-8), so "locked files are
+immutable" means the pointer cannot move without a logged override.
+
+**`content_complete` now needs every deck approved and locked** (D-015's
+guard, tightened as promised). Because approval resolves a review, the
+brand-template `manual` rule moves back onto decks (D-015 addendum reversed).
+
+**Playback is not distribution (Shane's pick: both, split by package).** A
+*room* package is the playback set for one room: every locked deck and video
+owned by the speakers of that room's published sessions, in agenda running
+order, with a named gap for each one not locked yet. It has no consent check:
+it plays a presenter's own deck in their own session, and gating it on
+"distribute deck" would pull the deck from its own talk. An *attendees*
+package is the post-show deck bundle, and every entry goes through
+`releasable(…, 'deck')`: a withheld speaker's deck is not in the manifest at
+all, and the reason is shown to the producer only. That is where hard rule 6
+lives, and its no-path sweep test lands with it (D-012's fixture). This
+corrects D-012's assumption that the room builder was the gate.
+
+**A package is stale by content, like a call sheet (D-009).** Each build is an
+append-only `DistributionPackage` with its manifest, a SHA-256 over the
+manifest's canonical JSON, and the agenda version it was built from. Stale
+means the manifest built now would have a different checksum. So an agenda
+change that does not touch a room leaves its package current, and nothing can
+clear the flag except a rebuild that makes the stored checksum match again. An
+unchanged package is never rebuilt. Rebuild is a producer's button, not
+automatic (the backlog's wording): the stale flag is the signal, and an
+automatic rebuild would hide what changed.
+
+**Running order comes from the published snapshot.** Sessions, their order and
+their speakers are read from the latest `AgendaVersion`, so a draft speaker
+swap does not reach a package until it is published. For that, `PublicSession`
+gains `speakerIds`: opaque cuids like D-007's session ids, added to the
+projection deliberately. This closes D-008's "the snapshot has no speaker ids".
+Snapshots published before this carry none and contribute nothing to a
+package; republish to fill them. Sponsor deliverables have no room, so they are
+in neither package yet.

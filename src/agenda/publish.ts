@@ -13,9 +13,11 @@ export class PublishBlocked extends Error {
 /**
  * What the public agenda may show. An explicit projection, so a field added
  * to Session (AV notes, speaker phone numbers) stays private until added here.
- * `id` is an opaque key so run-sheet cues can anchor to a session as published.
+ * `id` is an opaque key so run-sheet cues can anchor to a session as published;
+ * `speakerIds` (same order as `speakers`) are opaque too, so distribution
+ * packages follow the speakers as published, not the draft (D-016).
  */
-export type PublicSession = { id: string; title: string; day: LocalDate; room: string; startMin: number; endMin: number; speakers: string[] };
+export type PublicSession = { id: string; title: string; day: LocalDate; room: string; startMin: number; endMin: number; speakers: string[]; speakerIds: string[] };
 
 /** A grid row, with the flag conflicts.ts does not need but publishAgenda does. */
 export type GridSessionRow = GridSession & { isRehearsal: boolean };
@@ -49,10 +51,13 @@ export async function publishAgenda(eventId: string, clock: Clock) {
   if (conflicts.length) throw new PublishBlocked(conflicts);
 
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
-  const snapshot: PublicSession[] = sessions.filter((s) => !s.isRehearsal).map((s) => ({
-    id: s.id, title: s.title, day: s.day, room: roomName.get(s.roomId)!, startMin: s.startMin, endMin: s.endMin,
-    speakers: s.speakers.map((p) => p.name).sort(),
-  }));
+  const snapshot: PublicSession[] = sessions.filter((s) => !s.isRehearsal).map((s) => {
+    const speakers = [...s.speakers].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    return {
+      id: s.id, title: s.title, day: s.day, room: roomName.get(s.roomId)!, startMin: s.startMin, endMin: s.endMin,
+      speakers: speakers.map((p) => p.name), speakerIds: speakers.map((p) => p.id),
+    };
+  });
   const last = await prisma.agendaVersion.findFirst({ where: { eventId }, orderBy: { number: 'desc' }, select: { number: true } });
   return prisma.agendaVersion.create({
     data: { eventId, number: (last?.number ?? 0) + 1, snapshot, publishedAt: clock.now() },

@@ -20,7 +20,7 @@ prior gate's fixtures or demo story fail.
 |---|---|---|
 | S-7 | Speaker bureau: lifecycle state machine (`invited→confirmed→contracted→content_complete→rehearsed→showed→released`), profile/AV/honorarium fields, rehearsal slots against the existing conflict engine, release/consent flags (record/distribute/publish) as structural gates with a no-path fixture | ✅ |
 | S-8 | Content turn-in pipeline, part 1: tokenized submission portal for speaker decks + sponsor deliverables, versioned uploads (v1…vN kept), comment/review cycle per version, technical validation rules-as-data with a plain-language fix list | ✅ |
-| S-9 | Content turn-in pipeline, part 2: approve → show-file lock (immutable), late-revision override (logged, re-validates), per-room distribution builder (checksummed manifest, running order from the agenda), stale-package flag that clears only on rebuild | 🔲 |
+| S-9 | Content turn-in pipeline, part 2: approve → show-file lock (immutable), late-revision override (logged, re-validates), per-room distribution builder (checksummed manifest, running order from the agenda), stale-package flag that clears only on rebuild | ✅ |
 | S-10 | Chase dashboard: turn-in deadlines derived from show date minus lead time, reminder outbox, escalation worklist, bureau missing-item flags (no headshot, unsigned, unvalidated deck) and lifecycle funnel rolled in | 🔲 |
 | S-11 | Phase 2 gate: e2e on a production build, demo story (a speaker submits v7 after lock → override, revalidate, distribution package rebuild) | 🔲 |
 

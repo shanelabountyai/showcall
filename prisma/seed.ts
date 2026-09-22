@@ -12,6 +12,8 @@ import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
 import { systemClock } from '../src/clock';
+import { buildPackage } from '../src/content/distribution';
+import { approve } from '../src/content/lock';
 import { addDeliverable, addRule, addSponsor, issuePortalToken, submitVersion } from '../src/content/pipeline';
 import { prisma } from '../src/db';
 import { createEvent } from '../src/events';
@@ -89,18 +91,18 @@ const bureauPlan: Record<string, {
     consent: { recordSession: true, distributeDeck: true, publishVideo: false },
   },
 };
-// Content turn-in (P0-5, D-015): the default rule set, two sponsors, and a
-// deck for every speaker at or past content_complete — which the guard now
-// requires. Hollis Grant's deck shows the loop: v1 failed on fonts, v2 passed.
-// The brand-template check is `manual` (always needs review), so it sits on
-// sponsor banners, not decks: on a deck it would block content_complete until
-// S-9's approval exists.
+// Content turn-in (P0-5, D-015/D-016): the default rule set, two sponsors, and
+// an approved, locked deck for every speaker at or past content_complete —
+// which the guard requires. Hollis Grant's deck shows the loop: v1 failed on
+// fonts, v2 fixed it. The brand-template check is `manual`, so every deck is
+// *needs review* until a producer's approval resolves it.
 const MB = 1024 * 1024;
 const rules: [Parameters<typeof addRule>[1], Parameters<typeof addRule>[2], object, string][] = [
   ['deck', 'max_bytes', { max: 100 * MB }, 'Keep the deck under 100 MB — compress large images or link videos instead of embedding them.'],
   ['deck', 'file_type', { types: ['pdf', 'pptx'] }, 'Send the deck as a PDF or a PowerPoint (.pptx) file.'],
   ['deck', 'aspect_ratio', { ratio: 16 / 9, tolerance: 0.01 }, 'Set the slide size to 16:9 widescreen (Design → Slide Size) and export again.'],
   ['deck', 'fonts_embedded', {}, 'Embed your fonts when exporting (PowerPoint: File → Options → Save → Embed fonts; PDF: "PDF/A" or "embed all fonts").'],
+  ['deck', 'manual', {}, 'Production checks the deck against the event brand template.'],
   ['logo', 'file_type', { types: ['png'] }, 'Send the logo as a PNG with a transparent background.'],
   ['logo', 'min_pixels', { width: 1000 }, 'The logo must be at least 1000 pixels wide — export it larger from the original artwork.'],
   ['banner', 'manual', {}, 'Production checks the banner against the event brand template.'],
@@ -138,7 +140,8 @@ for (const [name, plan] of Object.entries(bureauPlan)) {
       await submitVersion(token, deck.id, file(await deckPdf(name, true), 'hollis-grant-deck.pdf'), systemClock);
       portalLinks.push(`${name}: /portal/${token}`);
     }
-    await submitVersion(token, deck.id, file(await deckPdf(name, false), `${name.toLowerCase().replace(/\W+/g, '-')}-deck-final.pdf`), systemClock);
+    const final = await submitVersion(token, deck.id, file(await deckPdf(name, false), `${name.toLowerCase().replace(/\W+/g, '-')}-deck-final.pdf`), systemClock);
+    await approve(final.id, systemClock);
   }
   while ((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).state !== plan.target) await advance(speakerId, systemClock);
 }
@@ -172,6 +175,10 @@ for (const day of [d1, d2]) {
   await cue('Salon C', 'Afternoon coffee', 30, { anchorId: session[`${day} Salon C ${at(14, 30)}`], anchorEdge: 'end' }, ['Catering']);
 }
 await issueCallSheets(event.id, systemClock);
+
+// Every package built once, so the demo starts current and a late override shows the stale flag.
+for (const r of Object.values(room)) await buildPackage(event.id, { audience: 'room', roomId: r.id }, systemClock);
+await buildPackage(event.id, { audience: 'attendees' }, systemClock);
 
 // Staff and day-of roles. Stage managers own a room; the producer and TD are event-wide.
 const crew: [string, number, 'producer' | 'stage_manager' | 'technical_director' | 'crew', keyof typeof room | null, number, number][] = [

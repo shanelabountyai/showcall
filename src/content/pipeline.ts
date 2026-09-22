@@ -42,6 +42,7 @@ const portalInclude = {
           runs: { orderBy: { at: 'desc' } }, comments: { orderBy: { at: 'asc' } },
         },
       },
+      locks: { orderBy: { number: 'desc' }, take: 1, select: { versionId: true } },
     },
   },
 } as const;

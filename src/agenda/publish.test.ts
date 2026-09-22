@@ -26,7 +26,7 @@ describe('publishAgenda', () => {
     expect(v1.number).toBe(1);
     expect(v1.publishedAt.toISOString()).toBe('2026-10-01T15:00:00.000Z');
     const [only] = v1.snapshot as PublicSession[];
-    expect(Object.keys(only!).sort()).toEqual(['day', 'endMin', 'id', 'room', 'speakers', 'startMin', 'title']);
+    expect(Object.keys(only!).sort()).toEqual(['day', 'endMin', 'id', 'room', 'speakerIds', 'speakers', 'startMin', 'title']);
     expect(only).toMatchObject({ day: D1, room: 'Ballroom A', speakers: ['Dana Reyes'] });
 
     expect((await publishAgenda(event.id, clock)).number).toBe(2);

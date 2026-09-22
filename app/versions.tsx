@@ -10,8 +10,14 @@ type Version = {
 const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
-/** A deliverable's versions, newest first: validation outcome, what to fix, and the comment thread. Shared by the portal and the producer view. */
-export function Versions({ versions, href, commentForm }: { versions: Version[]; href?: (versionId: string) => string; commentForm: (versionId: string) => React.ReactNode }) {
+/** A deliverable's versions, newest first: validation outcome, what to fix, the show-file mark, and the comment thread. Shared by the portal and the producer view. */
+export function Versions({ versions, href, commentForm, lockedId, lockForm }: {
+  versions: Version[]; href?: (versionId: string) => string; commentForm: (versionId: string) => React.ReactNode;
+  /** The version that is the show file (D-016), if any. */
+  lockedId?: string;
+  /** Producer only: approve / override controls. */
+  lockForm?: (versionId: string) => React.ReactNode;
+}) {
   if (!versions.length) return <p>Nothing uploaded yet.</p>;
   return (
     <ol reversed>
@@ -23,6 +29,7 @@ export function Versions({ versions, href, commentForm }: { versions: Version[];
           <li key={v.id}>
             <strong>v{v.number}</strong> {href ? <a href={href(v.id)}>{v.filename}</a> : v.filename} · {mb(v.byteSize)} · {stamp(v.uploadedAt)} ·{' '}
             <strong>{run?.outcome.replace('_', ' ') ?? 'not validated'}</strong>
+            {v.id === lockedId && <> · <strong>🔒 show file</strong></>}
             {todo.length > 0 && (
               <ul>{todo.map((r) => <li key={r.ruleId}>{r.status === 'fail' ? 'Fix' : 'Needs review'}: {r.fix}</li>)}</ul>
             )}
@@ -30,6 +37,7 @@ export function Versions({ versions, href, commentForm }: { versions: Version[];
             {v.comments.length > 0 && (
               <ul>{v.comments.map((c) => <li key={c.id}>{c.side}{c.requestsChanges && ' (requests changes)'}: {c.body} — {stamp(c.at)}</li>)}</ul>
             )}
+            {lockForm?.(v.id)}
             {commentForm(v.id)}
           </li>
         );

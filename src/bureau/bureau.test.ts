@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
+import { approve } from '../content/lock';
 import { makeDeck, makeEvent, makeSession, makeSpeaker, resetDb } from '../test/harness';
 import { advance, LIFECYCLE, revert, setConsent, setProfile, SpeakerRefused } from './bureau';
 
@@ -23,10 +24,10 @@ describe('advance', () => {
     await advance(speaker.id, clock);
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).state).toBe('contracted');
 
-    await expect(advance(speaker.id, clock)).rejects.toThrow(/cannot become content_complete: needs a bio and a validated deck$/);
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/cannot become content_complete: needs a bio and an approved deck$/);
     await setProfile(speaker.id, { bio: 'A keynote speaker.' });
-    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
-    await makeDeck(speaker.id, 'passed');
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs an approved deck$/);
+    await approve((await makeDeck(speaker.id, 'passed')).id, clock);
     await advance(speaker.id, clock);
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).state).toBe('content_complete');
   });
@@ -74,17 +75,20 @@ describe('advance', () => {
   });
 });
 
-describe('content_complete and the deck (D-015)', () => {
-  it('is refused when the latest deck failed, even though v1 passed; allowed once a passing version is latest', async () => {
+describe('content_complete and the deck (D-016)', () => {
+  it('a passing deck is not enough until it is approved and locked — and every deck needs it', async () => {
     const event = await makeEvent();
     const speaker = await makeSpeaker(event.id, { state: 'contracted' });
     await setProfile(speaker.id, { bio: 'A keynote speaker.' });
-    await makeDeck(speaker.id, 'passed');
-    await makeDeck(speaker.id, 'failed');
-    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
-    await makeDeck(speaker.id, 'needs_review');
-    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
-    await makeDeck(speaker.id, 'passed');
+    const v1 = await makeDeck(speaker.id, 'passed');
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs an approved deck$/);
+    await approve(v1.id, clock);
+    const second = await prisma.deliverable.create({ data: { eventId: event.id, speakerId: speaker.id, kind: 'deck', label: 'Breakout deck' } });
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs an approved deck$/);
+    const v = await prisma.contentVersion.create({
+      data: { deliverableId: second.id, number: 1, filename: 'b.pdf', mimeType: 'application/pdf', bytes: new Uint8Array([1]), byteSize: 1, sha256: '', facts: {}, uploadedAt: clock.now(), runs: { create: { outcome: 'needs_review', results: [], at: clock.now() } } },
+    });
+    await approve(v.id, clock);
     await expect(advance(speaker.id, clock)).resolves.toMatchObject({ to: 'content_complete' });
   });
 });

@@ -121,7 +121,7 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(ballroom.getByRole('button', { name: 'GO' })).toHaveCount(0);
     });
   });
-  test.describe('content turn-in (S-8)', () => {
+  test.describe('content turn-in (S-8, S-9)', () => {
     test('a producer issues a link; the speaker uploads, sees what to fix, and fixes it', async ({ page }) => {
       await page.goto(`/events/${eventId}/content`);
       await page.getByLabel('Owner').selectOption({ label: 'Keiko Brandt' });
@@ -141,8 +141,29 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
 
       await page.getByLabel('File for Staffing models deck').setInputFiles(await deck(false));
       await page.getByRole('button', { name: 'Upload' }).click();
-      await expect(page.locator('li').filter({ hasText: /^v2 deck-v2\.pdf/ })).toContainText('passed');
+      // The brand-template check is manual (D-016), so v2 waits on the producer.
+      await expect(page.locator('li').filter({ hasText: /^v2 deck-v2\.pdf/ })).toContainText('needs review');
       await expect(page.locator('li').filter({ hasText: /^v1 deck-v1\.pdf/ })).toContainText('failed');
+    });
+
+    test('approve locks v2 as the show file; the room package goes stale until rebuilt; attendees are consent-gated (S-9)', async ({ page }) => {
+      await page.goto(`/events/${eventId}/content`);
+      const keiko = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Keiko Brandt/ }) });
+      await keiko.getByRole('button', { name: 'Approve and lock' }).click();
+      await expect(keiko.getByRole('heading', { name: /Staffing models deck \(deck\) — locked to v2/ })).toBeVisible();
+      await expect(keiko.locator('li').filter({ hasText: /^v2 deck-v2\.pdf/ })).toContainText('show file');
+
+      await page.goto(`/events/${eventId}/packages`);
+      const salonB = page.getByRole('region', { name: 'Salon B — playback' });
+      await expect(salonB).toContainText('STALE — rebuild');
+      await expect(salonB).toContainText('Added: Operations 1.1: Staffing models — Keiko Brandt: Staffing models deck v2');
+      await salonB.getByRole('button', { name: 'Rebuild package' }).click();
+      await expect(salonB).toContainText('Package 2');
+      await expect(salonB).toContainText('current');
+      await expect(salonB.getByRole('button', { name: 'Rebuild package' })).toHaveCount(0);
+
+      const attendees = page.getByRole('region', { name: /^Attendees/ });
+      await expect(attendees).toContainText("Withheld: Staffing models deck — Keiko Brandt's consent has not been recorded");
     });
 
     test('a bad portal token is a plain 404', async ({ page }) => {

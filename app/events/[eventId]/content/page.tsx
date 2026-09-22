@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { systemClock } from '@/src/clock';
+import { approve, override } from '@/src/content/lock';
 import { addDeliverable, addRule, addSponsor, ContentRefused, issuePortalToken, producerComment } from '@/src/content/pipeline';
 import { prisma } from '@/src/db';
 import { DeliverableKind, RuleCheck } from '@/src/generated/prisma/enums';
@@ -16,6 +17,8 @@ function ownerFrom(key: string) {
 
 // Never load file bytes to render a page — and never let a server action's closure capture them.
 const versions = { orderBy: { number: 'desc' }, omit: { bytes: true }, include: { runs: { orderBy: { at: 'desc' } }, comments: { orderBy: { at: 'asc' } } } } as const;
+const deliverables = { orderBy: { label: 'asc' }, include: { versions, locks: { orderBy: { number: 'asc' }, include: { version: { select: { number: true } } } } } } as const;
+const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 
 /**
  * Content turn-in, producer side (P0-5, D-015): who owes what, every version
@@ -29,8 +32,8 @@ export default async function Content({ params, searchParams }: { params: Promis
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
-      speakers: { orderBy: { name: 'asc' }, include: { deliverables: { orderBy: { label: 'asc' }, include: { versions } } } },
-      sponsors: { orderBy: { name: 'asc' }, include: { deliverables: { orderBy: { label: 'asc' }, include: { versions } } } },
+      speakers: { orderBy: { name: 'asc' }, include: { deliverables } },
+      sponsors: { orderBy: { name: 'asc' }, include: { deliverables } },
       rules: { orderBy: [{ kind: 'asc' }, { check: 'asc' }] },
     },
   });
@@ -67,6 +70,16 @@ export default async function Content({ params, searchParams }: { params: Promis
     await refusable(here, () => producerComment(String(form.get('versionId')), String(form.get('body')), form.get('requestsChanges') === 'on', systemClock), ContentRefused);
   }
 
+  async function doApprove(form: FormData) {
+    'use server';
+    await refusable(here, () => approve(String(form.get('versionId')), systemClock), ContentRefused);
+  }
+
+  async function doOverride(form: FormData) {
+    'use server';
+    await refusable(here, () => override(String(form.get('versionId')), String(form.get('reason')), systemClock), ContentRefused);
+  }
+
   async function doRule(form: FormData) {
     'use server';
     await refusable(here, async () => {
@@ -94,10 +107,28 @@ export default async function Content({ params, searchParams }: { params: Promis
             <input type="hidden" name="owner" value={o.key} />
             <button type="submit">{o.portalTokenHash ? 'Reissue portal link (old one stops working)' : 'Issue portal link'}</button>
           </form>
-          {o.deliverables.map((d) => (
+          {o.deliverables.map((d) => {
+            const lock = d.locks.at(-1);
+            return (
             <div key={d.id}>
-              <h3>{d.label} ({d.kind.replace('_', ' ')})</h3>
-              <Versions versions={d.versions} href={(id) => `${here}/file/${id}`} commentForm={(versionId) => (
+              <h3>{d.label} ({d.kind.replace('_', ' ')}){lock ? ` — locked to v${lock.version.number}` : ''}</h3>
+              {d.locks.length > 0 && (
+                <ul>{d.locks.map((l) => <li key={l.id}>Lock {l.number}: {l.kind} v{l.version.number} — {stamp(l.at)}{l.reason && ` — ${l.reason}`}</li>)}</ul>
+              )}
+              <Versions versions={d.versions} href={(id) => `${here}/file/${id}`} lockedId={lock?.versionId} lockForm={(versionId) => (
+                !lock ? (versionId === d.versions[0]?.id && (
+                  <form action={doApprove}>
+                    <input type="hidden" name="versionId" value={versionId} />
+                    <button type="submit">Approve and lock</button>
+                  </form>
+                )) : versionId !== lock.versionId && (
+                  <form action={doOverride}>
+                    <input type="hidden" name="versionId" value={versionId} />
+                    <input name="reason" required placeholder="Reason for the override" aria-label="Override reason" />{' '}
+                    <button type="submit">Override lock to this version</button>
+                  </form>
+                )
+              )} commentForm={(versionId) => (
                 <form action={doComment}>
                   <input type="hidden" name="versionId" value={versionId} />
                   <input name="body" required placeholder="Comment" aria-label="Comment" />{' '}
@@ -106,7 +137,8 @@ export default async function Content({ params, searchParams }: { params: Promis
                 </form>
               )} />
             </div>
-          ))}
+            );
+          })}
           {o.deliverables.length === 0 && <p>Nothing owed yet.</p>}
         </section>
       ))}

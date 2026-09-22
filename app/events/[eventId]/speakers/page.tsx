@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { advance, LIFECYCLE, nextStepBlocked, revert, setConsent, setProfile, SpeakerRefused, deckQuery, deckValidated, type GuardCtx } from '@/src/bureau/bureau';
+import { advance, LIFECYCLE, nextStepBlocked, revert, setConsent, setProfile, SpeakerRefused, deckQuery, deckLocked, type GuardCtx } from '@/src/bureau/bureau';
 import { systemClock } from '@/src/clock';
 import { prisma } from '@/src/db';
 import { GridEditRefused, saveSession } from '@/src/agenda/grid';
@@ -88,7 +88,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
         const ctx: GuardCtx = {
           honorariumCents: s.honorariumCents, contractSignedAt: s.contractSignedAt, bio: s.bio, consentRecordedAt: s.consentRecordedAt,
           hasRehearsal: s.sessions.some((x) => x.session.isRehearsal), hasSession: s.sessions.some((x) => !x.session.isRehearsal),
-          deckValidated: deckValidated(s.deliverables),
+          deckLocked: deckLocked(s.deliverables),
         };
         const blocked = nextStepBlocked(s.state, ctx);
         const earlier = LIFECYCLE.slice(0, LIFECYCLE.indexOf(s.state));

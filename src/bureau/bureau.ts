@@ -19,22 +19,19 @@ export class SpeakerRefused extends Error {}
 export type GuardCtx = {
   honorariumCents: number | null; contractSignedAt: Date | null; bio: string;
   consentRecordedAt: Date | null; hasRehearsal: boolean; hasSession: boolean;
-  /** Every deck the speaker owes has a latest version whose latest run passed (D-015). */
-  deckValidated: boolean;
+  /** Every deck the speaker owes is approved and locked as a show file (D-016). */
+  deckLocked: boolean;
 };
 
 /** What content_complete is missing — each piece named, so S-10 can flag them one by one. */
-export function contentMissing(c: Pick<GuardCtx, 'bio' | 'deckValidated'>): string[] {
-  return [...(!c.bio.trim() ? ['a bio'] : []), ...(!c.deckValidated ? ['a validated deck'] : [])];
+export function contentMissing(c: Pick<GuardCtx, 'bio' | 'deckLocked'>): string[] {
+  return [...(!c.bio.trim() ? ['a bio'] : []), ...(!c.deckLocked ? ['an approved deck'] : [])];
 }
 
 /** The deck half of the guard, over the shape `deckQuery` selects. */
-export type DeckState = { versions: { runs: { outcome: string }[] }[] }[];
-export const deckValidated = (decks: DeckState) => decks.length > 0 && decks.every((d) => d.versions[0]?.runs[0]?.outcome === 'passed');
-export const deckQuery = {
-  where: { kind: 'deck' },
-  select: { versions: { orderBy: { number: 'desc' }, take: 1, select: { runs: { orderBy: { at: 'desc' }, take: 1, select: { outcome: true } } } } },
-} as const;
+export type DeckState = { locks: unknown[] }[];
+export const deckLocked = (decks: DeckState) => decks.length > 0 && decks.every((d) => d.locks.length > 0);
+export const deckQuery = { where: { kind: 'deck' }, select: { locks: { take: 1, select: { id: true } } } } as const;
 
 /** What `to` requires, or null if `ctx` already satisfies it. */
 const GUARDS: Partial<Record<SpeakerState, (ctx: GuardCtx) => string | null>> = {
@@ -65,7 +62,7 @@ async function loadCtx(tx: Tx, speakerId: string): Promise<GuardCtx> {
     consentRecordedAt: speaker.consentRecordedAt,
     hasRehearsal: sessions.some((s) => s.session.isRehearsal),
     hasSession: sessions.some((s) => !s.session.isRehearsal),
-    deckValidated: deckValidated(decks),
+    deckLocked: deckLocked(decks),
   };
 }
 

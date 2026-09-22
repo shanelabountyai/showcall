@@ -255,3 +255,73 @@ seeing "Fix: Embed your fonts" and "Fonts not embedded: Helvetica", and v2
 passing. That's the loop the feature exists for. One change: the evaluator
 needed a third status (*review*) beside pass/fail. Two states would have
 forced a guess on every fact the extractor can't read.
+
+## Content turn-in, part 2: lock, override, packages (P0-5, S-9)
+
+**Problem.** At 11pm the night before, a speaker sends v7. The playback
+operator in Salon B has v6 on the show laptop, and the producer thinks v5 got
+approved. Nobody can say which file is the show file, whether v7 was ever
+checked, or whether the room's playback folder matches the agenda after this
+afternoon's keynote move. And after the show, the "send everyone the decks"
+email goes out with a deck in it from a speaker who said no.
+
+**What it does.** Approving a version locks it as the show file. `ShowFileLock`
+is an append-only pointer, and its highest-numbered row wins. Lock 1 is the
+approve: latest version only, never a failed one, and it resolves *needs
+review*. So the brand-template `manual` rule goes back onto decks. Every later
+lock is an **override**: it needs a reason, and it re-runs the event's
+*current* rules as a new validation run. A failed run refuses the override,
+but the run stays in the log with its fix list. A database CHECK makes the
+approve/override shape structural, and a trigger refuses a lock that points
+at another deliverable's version. Portal uploads after lock are accepted as
+versions but never move the pointer. `content_complete` now needs every deck
+approved and locked.
+
+Distribution builds two kinds of package (`src/content/distribution.ts`). A
+**room** package is that room's playback set in running order from the
+published agenda: each speaker's locked decks and videos, with every item not
+locked yet named as a gap. An **attendees** package is the post-show deck
+bundle, and every entry passes the bureau's `releasable()` gate first. A
+withheld deck isn't in the manifest at all, and the producer sees why. Each
+build is append-only, with a SHA-256 over the manifest's canonical JSON. A
+package is **stale when the manifest built now would have a different
+checksum**. The page shows what was added and removed. Only a rebuild clears
+the flag, and an unchanged package is refused a rebuild.
+
+**What it deliberately does not do.** No automatic rebuild: the stale flag is
+the signal, and a silent rebuild would hide what changed. No file transfer.
+A package is a checksummed manifest, not a zip on the playback laptop, and
+there's no attendee delivery channel (P1-2). Sponsor files have no room, so
+they're in neither package. The capstone "v7 after lock" demo is S-11's.
+
+**Defects found while building.**
+- *Draft edits reaching a package.* The first builder took each session's
+  speakers from the draft grid, filtered by the names in the published
+  snapshot. Removing a speaker in the draft pulled their deck from the
+  package before anything was published. The test "a draft speaker change
+  doesn't reach the package until it's published" caught it. The fix was to
+  make the snapshot carry opaque `speakerIds`, as D-007 did for sessions, so
+  a package follows the agenda as published. The projection test's
+  exact-keys assertion then refused the new field until it was added on
+  purpose, which is what that assertion is there for.
+- *Ties under a fixed clock.* Ordering locks by timestamp is ambiguous when
+  two land in the same millisecond. That always happens under the test clock,
+  and can happen in real life. Locks got a dense `number` instead, which also
+  made "lock 1 is the approve" a one-line CHECK.
+
+**Verdict — producer review ("the cutoff-with-override rule, exactly"):
+validated.** The override is the cutoff: nothing reaches the show file after
+approval without a named reason in an append-only log, and the late file is
+re-checked against today's rules, not the ones it was uploaded under. One
+change: a failed re-check refuses the override (Shane's pick) instead of
+logging it and landing anyway.
+
+**Verdict — "distribution builder, regenerated when the agenda or a locked
+file changes, stale until rebuilt": changed.** It's stale-by-content, like
+call sheets (D-009): a keynote move flags Ballroom A and leaves Salon B
+current. It flags rather than regenerates, because at 11pm the producer needs
+to *see* that Salon B changed before its laptop does. The PRD's single
+builder also became two packages. Playback plays a presenter's own deck in
+their own session and isn't gated. The attendee bundle is where consent
+belongs, and its no-path sweep (all 8 consent combinations plus unrecorded)
+landed with it (D-016).

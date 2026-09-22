@@ -43,7 +43,7 @@ export default async function Portal({ params, searchParams }: { params: Promise
             <input type="hidden" name="deliverableId" value={d.id} />
             <input type="file" name="file" required aria-label={`File for ${d.label}`} /> <button type="submit">Upload</button>
           </form>
-          <Versions versions={d.versions} commentForm={(versionId) => (
+          <Versions versions={d.versions} lockedId={d.locks[0]?.versionId} commentForm={(versionId) => (
             <form action={doComment}>
               <input type="hidden" name="versionId" value={versionId} />
               <input name="body" required placeholder="Reply" aria-label="Reply" /> <button type="submit">Send</button>
