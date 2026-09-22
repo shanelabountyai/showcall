@@ -41,9 +41,16 @@ describe('draft grid editing', () => {
       { ...base, day: '2026-10-15' },
       { ...base, roomId: foreignRoom.id },
       { ...base, speakerIds: [foreignSpeaker.id] },
+      { ...base, isRehearsal: true, speakerIds: [] },
     ];
     for (const input of refused) await expect(saveSession(event.id, input)).rejects.toThrow(GridEditRefused);
     expect(await prisma.session.count()).toBe(0);
+  });
+
+  it('books a rehearsal, off the public agenda', async () => {
+    const { event, base } = await setup();
+    const rehearsal = await saveSession(event.id, { ...base, isRehearsal: true });
+    expect((await loadGrid(event.id)).sessions.find((s) => s.id === rehearsal.id)).toMatchObject({ isRehearsal: true });
   });
 
   it('will not edit or delete another event’s session', async () => {

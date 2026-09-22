@@ -53,6 +53,19 @@ describe('publishAgenda', () => {
     await expect(prisma.agendaVersion.delete({ where: { id: v1.id } })).rejects.toThrow(/append-only/);
   });
 
+  it('excludes rehearsals from the public snapshot, but a rehearsal conflict still blocks publish', async () => {
+    const { event, room, speaker } = await setup();
+    await makeSession(event.id, room.id, D1, 540, 600, [speaker.id]);
+    await makeSession(event.id, room.id, D1, 480, 520, [speaker.id], true); // clear of the 15 min turnover
+    const v1 = await publishAgenda(event.id, clock);
+    expect((v1.snapshot as PublicSession[])).toHaveLength(1);
+
+    await makeSession(event.id, room.id, D1, 500, 518, [], true); // overlaps the rehearsal above only
+    const err = await publishAgenda(event.id, clock).catch((e) => e);
+    expect(err).toBeInstanceOf(PublishBlocked);
+    expect(err.conflicts).toHaveLength(1);
+  });
+
   it('refuses an out-of-range session at the database', async () => {
     const { event, room } = await setup();
     await expect(makeSession(event.id, room.id, D1, 600, 600)).rejects.toThrow();

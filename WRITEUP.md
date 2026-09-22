@@ -160,3 +160,47 @@ now).
 **Verdict.** Not a producer-review feature; it is the Phase 1 gate. Passing:
 55 vitest tests, 8 e2e specs against a production build, and the demo script
 against the seeded summit, all green.
+
+## Speaker bureau (P0-4)
+
+**Problem.** A speaker moves through a real lifecycle — invited, confirmed,
+contracted, content turned in, rehearsed, showed, released for post-show
+distribution — and each step depends on data actually existing: no honorarium
+and signed contract, no business calling them contracted. Skip the checks and
+the state column is a label a producer can set to anything, which is worse
+than no tracking at all. Phase 2's pipeline (S-8/S-9) also needs an answer,
+before it exists, to "may this asset leave" — get that wrong once and an
+unreleased recording ships.
+
+**What it does.** `advance()` moves a speaker forward one state at a time,
+refused with the guard's own reason if the state isn't earned yet
+(`contracted` needs an honorarium and a signed contract; `content_complete` a
+bio; `rehearsed` a booked rehearsal slot; `showed` a real agenda session;
+`released` consent *recorded*, not that every flag is yes). `revert()` is a
+separate, deliberately unguarded path for a producer's correction: backwards
+only, a reason required, logged the same as a forward move. Every transition
+— forward or back — appends to `SpeakerTransition`, append-only like
+`AgendaVersion` and `LiveMark`. Rehearsals reuse P0-1's conflict engine
+outright: a rehearsal is a `Session` with `isRehearsal: true`, so room,
+turnover and speaker conflicts are checked identically and a double-booked
+rehearsal blocks publish, named like any other conflict — it is simply
+excluded from the public snapshot. `src/bureau/consent.ts` is the structural
+gate hard rule 6 requires (Quorum's discipline, per the PRD): a filter, not a
+boolean, so a caller gets back only what may release plus why each held-back
+item was held, and an unrecorded consent withholds everything regardless of
+the three flags. Proven with a no-path sweep over every flag combination ×
+asset kind × recorded/unrecorded before S-9 has anything real to gate.
+
+**What it deliberately does not do.** The `by` column on `SpeakerTransition`
+— there is still no user to name (same gap D-011 closed for GO, minus the
+`?as=` picker). Deck/headshot validation (`headshotUrl` and the
+`content_complete` guard are S-8's to extend). A UI to browse the transition
+log beyond a per-speaker `<details>`.
+
+**Verdict — producer review #1 ("Quorum's structural-gate discipline"):
+validated, with one change.** The no-path sweep held as written: consent
+unrecorded withholds every kind regardless of flags. The change from a plain
+boolean gate to a filter (`releasable()`) was made before S-9 exists, on the
+bet that a filter is harder to bypass by accident than a boolean callers must
+remember to check at every call site — S-9 will confirm or correct that bet
+when it's the one calling it.

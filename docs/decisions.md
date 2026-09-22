@@ -141,3 +141,35 @@ after S-9 ships. It also matches the Build Notes' TDD order — conflict
 engine → cascade → validation rules → consent no-path test — since the
 *fixture* proving the gate holds end-to-end lands with S-9, even though the
 gate function itself is written and unit-tested in S-7.
+
+## D-013 · 2026-09-22 · A rehearsal is a session; its conflicts block publish like any other
+
+`src/agenda/conflicts.ts` already anticipated this (P0-1's docstring). A
+rehearsal is a `Session` with `isRehearsal: true` — same room/turnover/speaker
+conflict checks, same draft-is-free-to-conflict rule. `loadGrid` returns every
+session, rehearsals included, so `detectConflicts` sees the whole picture and
+a double-booked rehearsal blocks publish, named like any other conflict. The
+only change at publish is the public snapshot: `publishAgenda` filters
+`isRehearsal` sessions out of what it writes to `AgendaVersion.snapshot`, so
+rehearsals never reach the public agenda, call sheets, or (per D-006) a cue
+anchor that survives a rebase. One rule ("a clean grid publishes"), not two.
+
+## D-014 · 2026-09-22 · Speaker lifecycle: guarded transitions plus a logged step-back; consent is a filter
+
+Shane's pick, for S-7. `advance()` moves one step at a time and is refused,
+naming the reason, unless the step's guard is satisfied (`contracted` needs
+an honorarium and a signed contract; `content_complete` needs a bio;
+`rehearsed` needs a rehearsal session booked; `showed` needs a real agenda
+session; `released` needs consent *recorded*, not that every flag is yes). A
+producer's correction is a separate function, `revert()`: it goes backwards
+only, requires a reason, and does not re-run the guards — the correction is
+what fixes a wrong one, so it cannot be blocked by the guard it is fixing.
+Every move, forward or back, appends to `SpeakerTransition` (append-only,
+like `AgendaVersion` and `LiveMark`); there is no `by` column yet — the app
+still has no users, same as D-011's GO log before staffing existed.
+
+`src/bureau/consent.ts` gates hard rule 6 as a **filter**, matching
+`projectCallSheet`'s shape (D-008): callers get back only what may release,
+plus why each held-back item was held. `consentRecordedAt == null` withholds
+every asset kind regardless of the three flags — an unanswered speaker is not
+a "no", but it is not a "yes" either, and the gate treats it as neither.

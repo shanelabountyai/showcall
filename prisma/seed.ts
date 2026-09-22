@@ -8,6 +8,7 @@
  */
 import { saveSession } from '../src/agenda/grid';
 import { publishAgenda } from '../src/agenda/publish';
+import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
 import { systemClock } from '../src/clock';
 import { prisma } from '../src/db';
@@ -63,6 +64,37 @@ for (const [day, n, keynote, closer, [a, b, c, d, e, f]] of [
 const session: Record<string, string> = {};
 for (const [day, r, startMin, endMin, title, speakers] of grid) {
   session[`${day} ${r} ${startMin}`] = (await saveSession(event.id, { title, day, roomId: room[r].id, startMin, endMin, speakerIds: speakers.map((s) => sp[s]!) })).id;
+}
+
+// Bureau (P0-4): profile, honorarium, contract, consent and rehearsals, spread
+// across the lifecycle and advanced through the real guards in
+// src/bureau/bureau.ts — the seed proves the machine rather than writing the
+// state column. Lucia Varga is released with mixed consent, so S-9's
+// distribution builder has a speaker who said no to something.
+const bureauPlan: Record<string, {
+  target: (typeof LIFECYCLE)[number]; honorariumCents?: number; bio?: string;
+  rehearsal?: keyof typeof room; consent?: { recordSession: boolean; distributeDeck: boolean; publishVideo: boolean };
+}> = {
+  'Ingrid Solberg': { target: 'confirmed' },
+  'Tomás Aguilar': { target: 'confirmed' },
+  'Keiko Brandt': { target: 'contracted', honorariumCents: 350_00 },
+  'Ravi Menon': { target: 'contracted', honorariumCents: 275_00 },
+  'Hollis Grant': { target: 'content_complete', honorariumCents: 400_00, bio: 'Chief value officer, twelve years leading payer-provider partnerships.' },
+  'Nadia Farouk': { target: 'rehearsed', honorariumCents: 450_00, bio: 'VP of ambient care technology; frequent keynote on interoperability.', rehearsal: 'Ballroom A' },
+  'Owen Castellano': { target: 'showed', honorariumCents: 320_00, bio: 'Director of supply chain resilience for a five-state health system.', rehearsal: 'Salon B' },
+  'Lucia Varga': {
+    target: 'released', honorariumCents: 500_00, bio: 'Board member and governance advisor across three regional health systems.', rehearsal: 'Salon C',
+    consent: { recordSession: true, distributeDeck: true, publishVideo: false },
+  },
+};
+for (const [name, plan] of Object.entries(bureauPlan)) {
+  const speakerId = sp[name]!;
+  if (plan.honorariumCents != null) await setProfile(speakerId, { honorariumCents: plan.honorariumCents, contractSignedAt: new Date('2026-08-15'), ...(plan.bio && { bio: plan.bio }) });
+  if (plan.rehearsal) {
+    await saveSession(event.id, { title: `Rehearsal — ${name}`, day: d1, roomId: room[plan.rehearsal].id, startMin: at(7, 30), endMin: at(8), speakerIds: [speakerId], isRehearsal: true });
+  }
+  if (plan.consent) await setConsent(speakerId, plan.consent, systemClock);
+  while ((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).state !== plan.target) await advance(speakerId, systemClock);
 }
 
 await publishAgenda(event.id, systemClock);
@@ -128,5 +160,5 @@ for (const row of due) {
   });
 }
 
-console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${due.length} GO marks. /events/${event.id}/live`);
+console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks. /events/${event.id}/live`);
 await prisma.$disconnect();

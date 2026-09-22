@@ -106,6 +106,14 @@ describe('run-sheet cascade', () => {
     await expect(previewCascade(other.id, { edits: [{ cueId: doors.id, offsetMin: -45 }] })).rejects.toThrow(/No cue/);
   });
 
+  it('marking a published session a rehearsal drops it from the next snapshot; the rebase names the vanished anchor (D-013)', async () => {
+    const { event, keynote } = await show();
+    await prisma.session.update({ where: { id: keynote.id }, data: { isRehearsal: true } });
+    await publishAgenda(event.id, clock);
+    const preview = await previewCascade(event.id, { rebase: true });
+    expect(preview.problems.map((p) => p.kind)).toEqual(['anchor_missing', 'anchor_missing']);
+  });
+
   it('will not build a run sheet from an unpublished agenda', async () => {
     const event = await makeEvent();
     await expect(previewCascade(event.id, { rebase: true })).rejects.toThrow(/Publish the agenda/);

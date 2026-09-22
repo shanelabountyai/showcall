@@ -55,12 +55,55 @@ model Room {
   @@unique([eventId, name])
 }
 
+enum SpeakerState {
+  invited
+  confirmed
+  contracted
+  content_complete
+  rehearsed
+  showed
+  released
+}
+
+/// P0-4 bureau. Lifecycle and consent fields; see src/bureau/bureau.ts.
 model Speaker {
   id       String           @id @default(cuid())
   name     String
   event    Event            @relation(fields: [eventId], references: [id])
   eventId  String
   sessions SessionSpeaker[]
+
+  state             SpeakerState @default(invited)
+  bio               String       @default("")
+  /// Filled by S-8's upload pipeline; S-10 flags its absence.
+  headshotUrl       String?
+  avNeeds           String       @default("")
+  /// Integer cents (hard rule 4).
+  honorariumCents   Int?
+  /// The e-sign seam.
+  contractSignedAt  DateTime?
+
+  /// Stamped when the three flags below were last recorded — "on file", not that they are all yes.
+  consentRecordedAt     DateTime?
+  consentRecordSession  Boolean @default(false)
+  consentDistributeDeck Boolean @default(false)
+  consentPublishVideo   Boolean @default(false)
+
+  transitions SpeakerTransition[]
+}
+
+/// Append-only (trigger): every lifecycle move, including a producer's correction back.
+model SpeakerTransition {
+  id        String       @id @default(cuid())
+  speaker   Speaker      @relation(fields: [speakerId], references: [id])
+  speakerId String
+  from      SpeakerState
+  to        SpeakerState
+  /// Required on a step back; empty on a forward advance.
+  reason    String       @default("")
+  at        DateTime
+
+  @@index([speakerId])
 }
 
 /// The draft grid. Edits are free; only a conflict-free grid publishes.
@@ -75,6 +118,9 @@ model Session {
   room     Room             @relation(fields: [roomId], references: [id])
   roomId   String
   speakers SessionSpeaker[]
+  /// A rehearsal is a session that is not on the public agenda (D-013): same
+  /// conflict engine, excluded from publishAgenda's snapshot.
+  isRehearsal Boolean @default(false)
 
   @@index([eventId, day])
 }

@@ -1,4 +1,5 @@
 import { prisma } from '../db';
+import type { SpeakerState } from '../generated/prisma/enums';
 import { toDbDate, type LocalDate } from '../time';
 
 export async function resetDb() {
@@ -23,13 +24,17 @@ export async function makeEvent(opts: { startDate?: LocalDate; endDate?: LocalDa
   });
 }
 
-export async function makeSession(eventId: string, roomId: string, day: LocalDate, startMin: number, endMin: number, speakerIds: string[] = []) {
+export async function makeSession(eventId: string, roomId: string, day: LocalDate, startMin: number, endMin: number, speakerIds: string[] = [], isRehearsal = false) {
   return prisma.session.create({
     data: {
-      eventId, roomId, title: `Session ${++n}`, day: toDbDate(day), startMin, endMin,
+      eventId, roomId, title: `Session ${++n}`, day: toDbDate(day), startMin, endMin, isRehearsal,
       speakers: { create: speakerIds.map((speakerId) => ({ speakerId })) },
     },
   });
+}
+
+export async function makeSpeaker(eventId: string, overrides: Partial<{ name: string; state: SpeakerState }> = {}) {
+  return prisma.speaker.create({ data: { eventId, name: overrides.name ?? `Speaker ${++n}`, ...(overrides.state && { state: overrides.state }) } });
 }
 
 export async function makeStaff(maxMinutesPerDay = 720) {

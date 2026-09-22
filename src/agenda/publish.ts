@@ -17,7 +17,10 @@ export class PublishBlocked extends Error {
  */
 export type PublicSession = { id: string; title: string; day: LocalDate; room: string; startMin: number; endMin: number; speakers: string[] };
 
-/** The event's draft grid, in the shape the conflict engine reads. */
+/** A grid row, with the flag conflicts.ts does not need but publishAgenda does. */
+export type GridSessionRow = GridSession & { isRehearsal: boolean };
+
+/** The event's draft grid, in the shape the conflict engine reads. Rehearsals are included — same conflict engine (D-013) — and carry `isRehearsal` for publishAgenda to filter on. */
 export async function loadGrid(eventId: string) {
   const [rooms, rows] = await Promise.all([
     prisma.room.findMany({ where: { eventId } }),
@@ -27,8 +30,9 @@ export async function loadGrid(eventId: string) {
       orderBy: [{ day: 'asc' }, { startMin: 'asc' }, { title: 'asc' }],
     }),
   ]);
-  const sessions: GridSession[] = rows.map((s) => ({
+  const sessions: GridSessionRow[] = rows.map((s) => ({
     id: s.id, title: s.title, day: fromDbDate(s.day), roomId: s.roomId, startMin: s.startMin, endMin: s.endMin,
+    isRehearsal: s.isRehearsal,
     speakers: s.speakers.map(({ speaker }) => ({ id: speaker.id, name: speaker.name })),
   }));
   return { rooms, sessions };
@@ -45,7 +49,7 @@ export async function publishAgenda(eventId: string, clock: Clock) {
   if (conflicts.length) throw new PublishBlocked(conflicts);
 
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
-  const snapshot: PublicSession[] = sessions.map((s) => ({
+  const snapshot: PublicSession[] = sessions.filter((s) => !s.isRehearsal).map((s) => ({
     id: s.id, title: s.title, day: s.day, room: roomName.get(s.roomId)!, startMin: s.startMin, endMin: s.endMin,
     speakers: s.speakers.map((p) => p.name).sort(),
   }));

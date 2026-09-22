@@ -6,19 +6,21 @@ export class GridEditRefused extends Error {}
 
 export type SessionInput = {
   id?: string; title: string; day: LocalDate; roomId: string;
-  startMin: number; endMin: number; speakerIds: string[];
+  startMin: number; endMin: number; speakerIds: string[]; isRehearsal?: boolean;
 };
 
 /**
  * Create or update a draft session. The draft is free to conflict (publish
  * refuses it); what is refused here is a session that cannot belong to the
  * event at all — another event's room or speaker, a day outside the event.
+ * A rehearsal (D-013) is a session with no one to rehearse without a speaker.
  */
 export async function saveSession(eventId: string, input: SessionInput) {
   const { id, speakerIds, day, ...fields } = input;
   const title = fields.title.trim();
   if (!title) throw new GridEditRefused('A session needs a title');
   if (!(fields.startMin < fields.endMin)) throw new GridEditRefused('A session must end after it starts');
+  if (fields.isRehearsal && speakerIds.length === 0) throw new GridEditRefused('A rehearsal needs a speaker');
 
   return prisma.$transaction(async (tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId } });
