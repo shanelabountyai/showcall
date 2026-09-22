@@ -204,3 +204,54 @@ boolean gate to a filter (`releasable()`) was made before S-9 exists, on the
 bet that a filter is harder to bypass by accident than a boolean callers must
 remember to check at every call site — S-9 will confirm or correct that bet
 when it's the one calling it.
+
+## Content turn-in, part 1 (P0-5, S-8)
+
+**Problem.** Decks and sponsor files arrive by email, in whatever shape the
+sender had: 4:3 slides for a 16:9 screen, fonts that fall back to Arial on
+the show laptop, a 300-pixel logo for a stage banner. The producer finds out
+at rehearsal. Every fix is another email, and nobody knows which attachment is
+the current one.
+
+**What it does.** Each speaker and sponsor gets a portal link. The database
+holds only the link token's SHA-256, and reissuing the link kills the old one.
+Every upload is a new version, v1…vN, all kept (append-only trigger). Numbers
+stay dense even under concurrent uploads (`SELECT … FOR UPDATE` on the
+deliverable). Facts come from the file's bytes, not from its name or claimed
+type (`src/content/facts.ts`, no new dependency): PDF page aspect and embedded
+fonts via pdf-lib, PNG/JPEG pixel size from the headers, MP4 video codecs from
+the sample-description box. A hostile or truncated file never throws; the fact
+just stays unknown. The event's rules are data (`ValidationRule`), and a pure
+`evaluate()` checks the facts against them. Each failure carries its own
+plain-language fix, shown to the submitter under the version. An unknown fact
+is *needs review*, never a pass. Each version keeps its validation run and a
+two-sided comment thread (producer / submitter, "requests changes"), all
+append-only. The trust boundary lives in `submitVersion` and
+`submitterComment`, not the page: speaker A's link cannot write to B's
+deliverable or a sponsor's, and a refused write leaves nothing behind. Bad
+rule parameters are refused when the rule is added, so a producer typo can't
+break every later upload of that kind. The bureau's `content_complete` now
+needs a bio **and** every deck's latest version passing validation (D-015). A
+passing v1 doesn't count if v2 failed.
+
+**What it deliberately does not do.** Approve/lock/override and distribution
+(S-9). Deadlines, reminders and missing-item flags (S-10). PPTX internals:
+a .pptx deck's fonts and aspect show as *needs review*. Fonts used only inside
+PDF form XObjects are not seen (marked `ponytail:` in facts.ts). No auth on
+the producer side, same as the rest of the app so far.
+
+**Defect found while building.** The plan's default deck rules included a
+`manual` brand-template check, which by design always returns *needs review*.
+With it on decks, no deck could ever pass, so `content_complete` would have
+been unreachable until S-9 ships approval. The seed puts that manual check on
+sponsor banners instead (D-015 addendum).
+
+**Verdict — producer review ("rules as data with a plain-language fix
+list"): validated.** The fix text lives on the rule, so the fix list is
+whatever the producer wrote, not engineer phrasing. The seeded fixes read as
+instructions ("Embed your fonts when exporting (PowerPoint: File → Options →
+Save …)"), not error codes. The e2e story is a speaker uploading a deck,
+seeing "Fix: Embed your fonts" and "Fonts not embedded: Helvetica", and v2
+passing. That's the loop the feature exists for. One change: the evaluator
+needed a third status (*review*) beside pass/fail. Two states would have
+forced a guess on every fact the extractor can't read.

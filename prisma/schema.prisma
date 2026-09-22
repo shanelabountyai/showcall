@@ -35,6 +35,9 @@ model Event {
   roles     CallRole[]
   marks     LiveMark[]
   staffing  Assignment[]
+  sponsors     Sponsor[]
+  deliverables Deliverable[]
+  rules        ValidationRule[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -90,6 +93,9 @@ model Speaker {
   consentPublishVideo   Boolean @default(false)
 
   transitions SpeakerTransition[]
+  /// SHA-256 of the portal token; the raw token is shown once. Reissue overwrites, killing the old link.
+  portalTokenHash String? @unique
+  deliverables    Deliverable[]
 }
 
 /// Append-only (trigger): every lifecycle move, including a producer's correction back.
@@ -280,4 +286,120 @@ model Assignment {
 
   @@index([staffId, day])
   @@index([eventId, day])
+}
+
+/// Content turn-in (P0-5, D-015). A sponsor owns deliverables like a speaker does.
+model Sponsor {
+  id              String        @id @default(cuid())
+  name            String
+  event           Event         @relation(fields: [eventId], references: [id])
+  eventId         String
+  portalTokenHash String?       @unique
+  deliverables    Deliverable[]
+
+  @@unique([eventId, name])
+}
+
+enum DeliverableKind {
+  deck
+  headshot
+  logo
+  banner
+  booth_info
+  video
+}
+
+/// One thing a speaker or sponsor owes. Exactly one owner (CHECK in the migration).
+model Deliverable {
+  id        String           @id @default(cuid())
+  kind      DeliverableKind
+  label     String
+  event     Event            @relation(fields: [eventId], references: [id])
+  eventId   String
+  speaker   Speaker?         @relation(fields: [speakerId], references: [id])
+  speakerId String?
+  sponsor   Sponsor?         @relation(fields: [sponsorId], references: [id])
+  sponsorId String?
+  versions  ContentVersion[]
+
+  @@index([eventId])
+}
+
+/// An uploaded file. Append-only (trigger): v1…vN are all kept, numbers dense.
+/// Facts come from the file (src/content/facts.ts), never from the uploader.
+model ContentVersion {
+  id            String          @id @default(cuid())
+  deliverable   Deliverable     @relation(fields: [deliverableId], references: [id])
+  deliverableId String
+  number        Int
+  filename      String
+  mimeType      String
+  bytes         Bytes
+  byteSize      Int
+  sha256        String
+  facts         Json
+  uploadedAt    DateTime
+  runs          ValidationRun[]
+  comments      VersionComment[]
+
+  @@unique([deliverableId, number])
+}
+
+enum RuleCheck {
+  max_bytes
+  file_type
+  aspect_ratio
+  fonts_embedded
+  min_pixels
+  codec_allowlist
+  manual
+}
+
+/// Rules are data, per event and deliverable kind; `fix` is shown on failure.
+model ValidationRule {
+  id      String          @id @default(cuid())
+  kind    DeliverableKind
+  check   RuleCheck
+  params  Json
+  fix     String
+  event   Event           @relation(fields: [eventId], references: [id])
+  eventId String
+
+  @@index([eventId, kind])
+}
+
+enum ValidationOutcome {
+  passed
+  needs_review
+  failed
+}
+
+/// Append-only: re-validation (S-9) adds a run beside the old one.
+model ValidationRun {
+  id        String            @id @default(cuid())
+  version   ContentVersion    @relation(fields: [versionId], references: [id])
+  versionId String
+  outcome   ValidationOutcome
+  results   Json
+  at        DateTime
+
+  @@index([versionId])
+}
+
+enum CommentSide {
+  producer
+  submitter
+}
+
+/// Append-only thread on a version.
+model VersionComment {
+  id              String         @id @default(cuid())
+  version         ContentVersion @relation(fields: [versionId], references: [id])
+  versionId       String
+  side            CommentSide
+  body            String
+  requestsChanges Boolean        @default(false)
+  at              DateTime
+
+  @@index([versionId])
 }

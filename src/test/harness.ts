@@ -1,5 +1,5 @@
 import { prisma } from '../db';
-import type { SpeakerState } from '../generated/prisma/enums';
+import type { SpeakerState, ValidationOutcome } from '../generated/prisma/enums';
 import { toDbDate, type LocalDate } from '../time';
 
 export async function resetDb() {
@@ -39,4 +39,19 @@ export async function makeSpeaker(eventId: string, overrides: Partial<{ name: st
 
 export async function makeStaff(maxMinutesPerDay = 720) {
   return prisma.staff.create({ data: { name: `Staff ${++n}`, maxMinutesPerDay } });
+}
+
+/** A deck version with one validation run, written directly — for guard tests, not the pipeline. */
+export async function makeDeck(speakerId: string, outcome: ValidationOutcome, at = new Date('2026-10-01T15:00:00Z')) {
+  const speaker = await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } });
+  const deck = await prisma.deliverable.findFirst({ where: { speakerId, kind: 'deck' } })
+    ?? await prisma.deliverable.create({ data: { eventId: speaker.eventId, speakerId, kind: 'deck', label: 'Main deck' } });
+  const number = (await prisma.contentVersion.count({ where: { deliverableId: deck.id } })) + 1;
+  return prisma.contentVersion.create({
+    data: {
+      deliverableId: deck.id, number, filename: `deck-v${number}.pdf`, mimeType: 'application/pdf',
+      bytes: new Uint8Array([1]), byteSize: 1, sha256: '', facts: {}, uploadedAt: at,
+      runs: { create: { outcome, results: [], at } },
+    },
+  });
 }

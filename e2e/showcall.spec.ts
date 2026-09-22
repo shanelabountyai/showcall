@@ -1,7 +1,15 @@
 import { test, expect } from '@playwright/test';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 const title = (t: string) => `input[name="title"][value="${t}"]`;
 const KEYNOTE = 'Opening keynote: Care at the speed of trust';
+
+async function deck(fonts: boolean) {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([1920, 1080]);
+  if (fonts) page.drawText('Staffing models', { font: await doc.embedFont(StandardFonts.Helvetica) });
+  return { name: fonts ? 'deck-v1.pdf' : 'deck-v2.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await doc.save()) };
+}
 
 /**
  * Browser coverage for the UI paths S-5 shipped with unit tests only: grid
@@ -111,6 +119,35 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       const salonB = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Salon B/ }) });
       await expect(salonB.getByRole('button', { name: 'GO' }).first()).toBeVisible();
       await expect(ballroom.getByRole('button', { name: 'GO' })).toHaveCount(0);
+    });
+  });
+  test.describe('content turn-in (S-8)', () => {
+    test('a producer issues a link; the speaker uploads, sees what to fix, and fixes it', async ({ page }) => {
+      await page.goto(`/events/${eventId}/content`);
+      await page.getByLabel('Owner').selectOption({ label: 'Keiko Brandt' });
+      await page.getByLabel('Kind', { exact: true }).selectOption('deck');
+      await page.getByLabel('Label').fill('Staffing models deck');
+      await page.getByRole('button', { name: 'Add deliverable' }).click();
+
+      const keiko = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Keiko Brandt/ }) });
+      await keiko.getByRole('button', { name: 'Issue portal link' }).click();
+      await page.getByRole('status').getByRole('link', { name: 'open' }).click();
+      await expect(page.getByRole('heading', { name: /content for Keiko Brandt/ })).toBeVisible();
+
+      await page.getByLabel('File for Staffing models deck').setInputFiles(await deck(true));
+      await page.getByRole('button', { name: 'Upload' }).click();
+      await expect(page.getByText(/Fix: Embed your fonts/)).toBeVisible();
+      await expect(page.getByText('Fonts not embedded: Helvetica')).toBeVisible();
+
+      await page.getByLabel('File for Staffing models deck').setInputFiles(await deck(false));
+      await page.getByRole('button', { name: 'Upload' }).click();
+      await expect(page.locator('li').filter({ hasText: /^v2 deck-v2\.pdf/ })).toContainText('passed');
+      await expect(page.locator('li').filter({ hasText: /^v1 deck-v1\.pdf/ })).toContainText('failed');
+    });
+
+    test('a bad portal token is a plain 404', async ({ page }) => {
+      const res = await page.goto('/portal/not-a-real-token');
+      expect(res?.status()).toBe(404);
     });
   });
 });

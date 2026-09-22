@@ -1,14 +1,17 @@
 # Next
 
-**S-7 shipped** (speaker bureau: lifecycle guards + logged step-back,
-rehearsal slots reusing the conflict engine, consent as a structural filter).
-D-013/D-014 recorded. `docs/backlog.md` S-7 → ✅.
+**S-9 — content turn-in pipeline, part 2.** Needs planning first (Opus).
+See `docs/backlog.md` S-9: approve → show-file lock (immutable), late-revision
+override (logged, re-validates as a new `ValidationRun`), per-room
+distribution builder (checksummed manifest from `ContentVersion.sha256`,
+running order from the agenda, consent via `releasable()`), and a stale-package
+flag that clears only on rebuild.
 
-**Next: S-8 — content turn-in pipeline, part 1.** Tokenized submission portal
-for speaker decks + sponsor deliverables, versioned uploads (v1…vN kept),
-comment/review cycle per version, technical validation rules-as-data with a
-plain-language fix list. Per D-012, S-7's `Speaker.state`/consent fields and
-`src/bureau/consent.ts` are already in place — the portal is per-speaker and
-should key off `content_complete`'s guard as the thing a validated deck
-eventually satisfies. Model: Opus plans, Sonnet builds (D-005's split), same
-as every prior item.
+Carry-overs from S-8:
+- Tighten `content_complete` to "approved and locked" (D-015 says S-9 does this).
+- An approval resolves *needs review*, so the brand-template `manual` rule can
+  move back onto decks (D-015 addendum).
+- The local dev DB has a checksum mismatch on `speaker_bureau`, so
+  `prisma migrate dev` wants a reset. `content_pipeline` is not applied to dev
+  yet. Fix: `npx prisma migrate reset` (dev is seeded synthetic data), then
+  `npm run db:seed`.

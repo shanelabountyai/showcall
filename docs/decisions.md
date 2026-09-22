@@ -173,3 +173,40 @@ still has no users, same as D-011's GO log before staffing existed.
 plus why each held-back item was held. `consentRecordedAt == null` withholds
 every asset kind regardless of the three flags — an unanswered speaker is not
 a "no", but it is not a "yes" either, and the gate treats it as neither.
+
+## D-015 · 2026-09-22 · Content turn-in: real file inspection with honest gaps; a validated deck gates content_complete
+
+Shane's picks, for S-8.
+
+**Facts come from the file, not the uploader.** A pure extractor reads what it
+can with no new dependency: byte size and sniffed type for everything; PDF
+page aspect ratio and embedded fonts via pdf-lib (already installed); PNG/JPEG
+pixel dimensions from header bytes; MP4/MOV codec from the sample-description
+box. A rule whose fact could not be read (PPTX fonts, brand-template fit)
+returns **needs review** — never a pass. A version's validation is
+failed > needs review > passed; only *passed* counts as validated.
+
+**Rules are data, per event**, keyed to a deliverable kind; the evaluator is a
+pure function over (facts, rules), and every failure carries its own
+plain-language fix. Results are stored per version, append-only, so S-9's
+re-validation on override is a new run beside the old one, not an overwrite.
+
+**`content_complete` now needs a bio and a latest deck version that passed
+validation** (D-014's guard, tightened). S-9 tightens it once more, to
+"approved and locked", when lock exists — deliberately two edits rather than
+leaving the guard meaningless for an item.
+
+Defaults taken without asking (reversible): file bytes live in Postgres
+(`bytea`) with a stored SHA-256 — local, transactional, and S-9's checksummed
+manifest reads the hash rather than re-hashing; portal tokens are random,
+stored only as a SHA-256 hash, one per speaker and one per sponsor, revocable
+by reissue; comments have an author side (producer/submitter) and no `by`,
+same as D-014.
+
+**Addendum (S-8 build).** The brand-template `manual` check is seeded on
+sponsor banners, not decks. `manual` always returns *needs review*, and only
+*passed* validates a deck, so on decks it would make `content_complete`
+unreachable until S-9's approval exists. S-9 can move it back once an
+approval resolves a review. Also: with several deck deliverables, the guard
+requires *every* deck's latest version to have passed, not just the most
+recent upload.

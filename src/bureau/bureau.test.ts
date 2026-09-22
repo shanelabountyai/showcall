@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
-import { makeEvent, makeSession, makeSpeaker, resetDb } from '../test/harness';
+import { makeDeck, makeEvent, makeSession, makeSpeaker, resetDb } from '../test/harness';
 import { advance, LIFECYCLE, revert, setConsent, setProfile, SpeakerRefused } from './bureau';
 
 const D1 = '2026-10-13';
@@ -23,8 +23,10 @@ describe('advance', () => {
     await advance(speaker.id, clock);
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).state).toBe('contracted');
 
-    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a bio/);
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/cannot become content_complete: needs a bio and a validated deck$/);
     await setProfile(speaker.id, { bio: 'A keynote speaker.' });
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
+    await makeDeck(speaker.id, 'passed');
     await advance(speaker.id, clock);
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).state).toBe('content_complete');
   });
@@ -69,6 +71,21 @@ describe('advance', () => {
     expect(rows).toMatchObject([{ from: 'invited', to: 'confirmed' }]);
     await expect(prisma.speakerTransition.update({ where: { id: rows[0]!.id }, data: { reason: 'edited' } })).rejects.toThrow(/append-only/);
     await expect(prisma.speakerTransition.delete({ where: { id: rows[0]!.id } })).rejects.toThrow(/append-only/);
+  });
+});
+
+describe('content_complete and the deck (D-015)', () => {
+  it('is refused when the latest deck failed, even though v1 passed; allowed once a passing version is latest', async () => {
+    const event = await makeEvent();
+    const speaker = await makeSpeaker(event.id, { state: 'contracted' });
+    await setProfile(speaker.id, { bio: 'A keynote speaker.' });
+    await makeDeck(speaker.id, 'passed');
+    await makeDeck(speaker.id, 'failed');
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
+    await makeDeck(speaker.id, 'needs_review');
+    await expect(advance(speaker.id, clock)).rejects.toThrow(/needs a validated deck$/);
+    await makeDeck(speaker.id, 'passed');
+    await expect(advance(speaker.id, clock)).resolves.toMatchObject({ to: 'content_complete' });
   });
 });
 

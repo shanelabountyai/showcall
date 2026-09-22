@@ -6,11 +6,13 @@
  *
  * Wipes the database first. Local only — db.ts refuses a cloud URL.
  */
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { saveSession } from '../src/agenda/grid';
 import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
 import { systemClock } from '../src/clock';
+import { addDeliverable, addRule, addSponsor, issuePortalToken, submitVersion } from '../src/content/pipeline';
 import { prisma } from '../src/db';
 import { createEvent } from '../src/events';
 import { addCue, commitCascade, loadRunSheet, previewCascade } from '../src/runsheet/cascade';
@@ -87,6 +89,40 @@ const bureauPlan: Record<string, {
     consent: { recordSession: true, distributeDeck: true, publishVideo: false },
   },
 };
+// Content turn-in (P0-5, D-015): the default rule set, two sponsors, and a
+// deck for every speaker at or past content_complete — which the guard now
+// requires. Hollis Grant's deck shows the loop: v1 failed on fonts, v2 passed.
+// The brand-template check is `manual` (always needs review), so it sits on
+// sponsor banners, not decks: on a deck it would block content_complete until
+// S-9's approval exists.
+const MB = 1024 * 1024;
+const rules: [Parameters<typeof addRule>[1], Parameters<typeof addRule>[2], object, string][] = [
+  ['deck', 'max_bytes', { max: 100 * MB }, 'Keep the deck under 100 MB — compress large images or link videos instead of embedding them.'],
+  ['deck', 'file_type', { types: ['pdf', 'pptx'] }, 'Send the deck as a PDF or a PowerPoint (.pptx) file.'],
+  ['deck', 'aspect_ratio', { ratio: 16 / 9, tolerance: 0.01 }, 'Set the slide size to 16:9 widescreen (Design → Slide Size) and export again.'],
+  ['deck', 'fonts_embedded', {}, 'Embed your fonts when exporting (PowerPoint: File → Options → Save → Embed fonts; PDF: "PDF/A" or "embed all fonts").'],
+  ['logo', 'file_type', { types: ['png'] }, 'Send the logo as a PNG with a transparent background.'],
+  ['logo', 'min_pixels', { width: 1000 }, 'The logo must be at least 1000 pixels wide — export it larger from the original artwork.'],
+  ['banner', 'manual', {}, 'Production checks the banner against the event brand template.'],
+  ['video', 'max_bytes', { max: 2048 * MB }, 'Keep the video under 2 GB — export at 1080p.'],
+  ['video', 'codec_allowlist', { codecs: ['avc1', 'hvc1'] }, 'Export the video as H.264 or H.265 (HEVC) MP4.'],
+];
+for (const [kind, check, params, fix] of rules) await addRule(event.id, kind, check, params, fix);
+for (const name of ['Contoso Health', 'Fabrikam Medical Devices']) {
+  const sponsor = await addSponsor(event.id, name);
+  await addDeliverable(event.id, { sponsorId: sponsor.id }, 'logo', `${name} logo`);
+  await addDeliverable(event.id, { sponsorId: sponsor.id }, 'banner', `${name} stage banner`);
+}
+async function deckPdf(title: string, fonts: boolean) {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([1920, 1080]);
+  page.drawRectangle({ x: 0, y: 0, width: 1920, height: 1080, color: rgb(0.1, 0.2, 0.4) });
+  // Standard fonts are never embedded — exactly what the fonts rule catches.
+  if (fonts) page.drawText(title, { x: 120, y: 540, size: 72, color: rgb(1, 1, 1), font: await doc.embedFont(StandardFonts.Helvetica) });
+  return doc.save();
+}
+const portalLinks: string[] = [];
+
 for (const [name, plan] of Object.entries(bureauPlan)) {
   const speakerId = sp[name]!;
   if (plan.honorariumCents != null) await setProfile(speakerId, { honorariumCents: plan.honorariumCents, contractSignedAt: new Date('2026-08-15'), ...(plan.bio && { bio: plan.bio }) });
@@ -94,6 +130,16 @@ for (const [name, plan] of Object.entries(bureauPlan)) {
     await saveSession(event.id, { title: `Rehearsal — ${name}`, day: d1, roomId: room[plan.rehearsal].id, startMin: at(7, 30), endMin: at(8), speakerIds: [speakerId], isRehearsal: true });
   }
   if (plan.consent) await setConsent(speakerId, plan.consent, systemClock);
+  if (LIFECYCLE.indexOf(plan.target) >= LIFECYCLE.indexOf('content_complete')) {
+    const deck = await addDeliverable(event.id, { speakerId }, 'deck', 'Session deck');
+    const token = await issuePortalToken({ speakerId });
+    const file = (bytes: Uint8Array, filename: string) => ({ filename, mimeType: 'application/pdf', bytes });
+    if (name === 'Hollis Grant') {
+      await submitVersion(token, deck.id, file(await deckPdf(name, true), 'hollis-grant-deck.pdf'), systemClock);
+      portalLinks.push(`${name}: /portal/${token}`);
+    }
+    await submitVersion(token, deck.id, file(await deckPdf(name, false), `${name.toLowerCase().replace(/\W+/g, '-')}-deck-final.pdf`), systemClock);
+  }
   while ((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).state !== plan.target) await advance(speakerId, systemClock);
 }
 
@@ -160,5 +206,6 @@ for (const row of due) {
   });
 }
 
+console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
 console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks. /events/${event.id}/live`);
 await prisma.$disconnect();

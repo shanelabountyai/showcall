@@ -19,12 +19,27 @@ export class SpeakerRefused extends Error {}
 export type GuardCtx = {
   honorariumCents: number | null; contractSignedAt: Date | null; bio: string;
   consentRecordedAt: Date | null; hasRehearsal: boolean; hasSession: boolean;
+  /** Every deck the speaker owes has a latest version whose latest run passed (D-015). */
+  deckValidated: boolean;
 };
+
+/** What content_complete is missing — each piece named, so S-10 can flag them one by one. */
+export function contentMissing(c: Pick<GuardCtx, 'bio' | 'deckValidated'>): string[] {
+  return [...(!c.bio.trim() ? ['a bio'] : []), ...(!c.deckValidated ? ['a validated deck'] : [])];
+}
+
+/** The deck half of the guard, over the shape `deckQuery` selects. */
+export type DeckState = { versions: { runs: { outcome: string }[] }[] }[];
+export const deckValidated = (decks: DeckState) => decks.length > 0 && decks.every((d) => d.versions[0]?.runs[0]?.outcome === 'passed');
+export const deckQuery = {
+  where: { kind: 'deck' },
+  select: { versions: { orderBy: { number: 'desc' }, take: 1, select: { runs: { orderBy: { at: 'desc' }, take: 1, select: { outcome: true } } } } },
+} as const;
 
 /** What `to` requires, or null if `ctx` already satisfies it. */
 const GUARDS: Partial<Record<SpeakerState, (ctx: GuardCtx) => string | null>> = {
   contracted: (c) => (c.honorariumCents == null || c.contractSignedAt == null) ? 'needs an honorarium and a signed contract' : null,
-  content_complete: (c) => (!c.bio.trim()) ? 'needs a bio' : null,
+  content_complete: (c) => { const m = contentMissing(c); return m.length ? `needs ${m.join(' and ')}` : null; },
   rehearsed: (c) => (!c.hasRehearsal) ? 'needs a booked rehearsal slot' : null,
   showed: (c) => (!c.hasSession) ? 'is not on the agenda' : null,
   released: (c) => (c.consentRecordedAt == null) ? 'needs consent recorded' : null,
@@ -40,15 +55,17 @@ export function nextStepBlocked(current: SpeakerState, ctx: GuardCtx): { to: Spe
 }
 
 async function loadCtx(tx: Tx, speakerId: string): Promise<GuardCtx> {
-  const [speaker, sessions] = await Promise.all([
+  const [speaker, sessions, decks] = await Promise.all([
     tx.speaker.findUniqueOrThrow({ where: { id: speakerId } }),
     tx.sessionSpeaker.findMany({ where: { speakerId }, include: { session: { select: { isRehearsal: true } } } }),
+    tx.deliverable.findMany({ where: { speakerId, ...deckQuery.where }, select: deckQuery.select }),
   ]);
   return {
     honorariumCents: speaker.honorariumCents, contractSignedAt: speaker.contractSignedAt, bio: speaker.bio,
     consentRecordedAt: speaker.consentRecordedAt,
     hasRehearsal: sessions.some((s) => s.session.isRehearsal),
     hasSession: sessions.some((s) => !s.session.isRehearsal),
+    deckValidated: deckValidated(decks),
   };
 }
 
