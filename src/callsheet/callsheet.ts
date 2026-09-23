@@ -98,7 +98,7 @@ export async function issueCallSheets(eventId: string, clock: Clock) {
     const issue = await prisma.callSheetIssue.create({
       data: { roleId: role.id, number: (last?.number ?? 0) + 1, agendaVersion: sheet.agendaVersion, content, issuedAt: clock.now() },
     });
-    issued.push({ issue, diff: diffCallSheets(prev, content) });
+    issued.push({ role: role.name, issue, diff: diffCallSheets(prev, content) });
   }
   return issued;
 }

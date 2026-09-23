@@ -32,6 +32,19 @@ Open http://localhost:4000. Two events are seeded: **Northwind Leadership Summit
 | 4. Make the rain call | Rain call → **Preview Rain: move to Ballroom A** | "Before anything changes, it shows what will: the reception moves from the terrace at 17:00 to Ballroom A at 17:30, and two call sheets change, Catering and Doors & Registration. A1 Audio isn't on the list." |
 | 5. Execute | **Execute Rain: move to Ballroom A** | "One commit covers the run sheet, the $3,800 on production and the decision. Only those two call sheets re-issued. The dry branch stays on file, marked not taken." Point at the **Decision log**. |
 
+## Phase 4 capstone — "five minutes, the whole nervous system" (Summit event, ~5 min)
+
+Start from a fresh seed (`npm run db:seed:test`). The e2e sweep runs this story itself, so it leaves the event spent.
+
+| Stop | Click | Say |
+|---|---|---|
+| 1. The 11pm v7 | Northwind Leadership Summit → **Content** → Hollis Grant → **Reissue portal link** → **open**, upload a PDF | "v6 is locked as the show file. A late v7 is kept but changes nothing. The lock holds." |
+| 2. Override | Back to **Content**, v7 → reason "Speaker revised Q3 figures at 11pm" → **Override lock to this version** | "An override is logged with its reason and re-validated against today's rules. v1 would be refused." |
+| 3. Rebuild | **Packages** → Ballroom A → **Rebuild package** | "The package went stale and named what changed. Distribution happens only on a producer's rebuild." |
+| 4. Keynote moves 15 | **Draft grid** → keynote 09:15–10:15 → **Save** → **Publish version 2** | "The grid publishes only while it's clean. v1 stays on file, append-only." |
+| 5. Rebase | **Live** → **Rebase and re-issue call sheets** | "The run sheet was stale against v2. The rebase re-issues A1 Audio and Doors & Registration, the only sheets the keynote touches. Catering isn't on the list." |
+| 6. Rain call | **Contingency** → **Preview Rain: move to Ballroom A** → **Execute** | "Still open before its 10:00 decide-by, never escalated. One commit moves the reception to 17:30 in Ballroom A, the load-out follows it, $3,800 posts, and only Catering and Doors & Registration re-issue." |
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -45,5 +58,6 @@ Open http://localhost:4000. Two events are seeded: **Northwind Leadership Summit
 ## Concede before you're asked
 
 - Synthetic data; no auth; nothing deployed.
+- The rain call is executed before its decide-by, not watched ticking over: the app reads the real clock, and the cue is tomorrow at 10:00. Unit tests cover the deadline escalation on an injected clock.
 - Releasing rooms posts nothing to the budget by design (D-018): only accepted exposure and awards do.
 - Attrition thresholds net against each other, so the block is never charged twice for the same room-night.

@@ -19,9 +19,9 @@ const signed = (min: number) => (min === 0 ? 'on time' : min > 0 ? `${min} min l
  * a mark; it never edits a cue. `?as=` picks who is calling — not auth (D-011):
  * GO shows only in that person's rooms, and markGo re-checks the assignment.
  */
-export default async function Live({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ as?: string; error?: string }> }) {
+export default async function Live({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ as?: string; error?: string; reissued?: string }> }) {
   const { eventId } = await params;
-  const { as, error } = await searchParams;
+  const { as, error, reissued } = await searchParams;
   if (!(await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } }))) notFound();
   const live = await liveShow(eventId, systemClock);
   const onDuty = await stageManagersOnDuty(eventId, live.day);
@@ -40,7 +40,8 @@ export default async function Live({ params, searchParams }: { params: Promise<{
     await refusable(`/events/${eventId}/live`, async () => {
       const preview = await previewCascade(eventId, { rebase: true });
       await commitCascade(eventId, { rebase: true }, preview.moved);
-      await issueCallSheets(eventId, systemClock);
+      const issued = await issueCallSheets(eventId, systemClock);
+      return new URLSearchParams({ reissued: issued.map((i) => i.role).join(', ') || 'none' });
     }, CascadeBlocked, CallSheetsBlocked);
   }
 
@@ -58,6 +59,7 @@ export default async function Live({ params, searchParams }: { params: Promise<{
         ))}
       </nav>
       {error && <p role="alert">{error}</p>}
+      {reissued && <p role="status">Call sheets re-issued: {reissued}.</p>}
       {live.stale && (
         <form action={rebase}>
           <p role="alert"><strong>The agenda has published past this run sheet.</strong> Times shown are the run sheet as built; rebase it.</p>

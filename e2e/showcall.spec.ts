@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
@@ -435,6 +436,79 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(log).toContainText('Sent to Lakeshore Catering: Reception service moves to Ballroom A');
       await expect(rain.getByRole('row').filter({ hasText: 'Dry: hold on the terrace' })).toContainText('not taken');
       await expect(rain.getByRole('link', { name: /^Preview/ })).toHaveCount(0);
+    });
+  });
+
+  /**
+   * The PRD's five-minute story, one test, in order, on a fresh seed — the
+   * blocks above spent the seed's v7, keynote and rain call on their own.
+   */
+  test.describe('Phase 4 gate — the capstone (S-19)', () => {
+    let summit = '';
+
+    test.beforeAll(async ({ request }) => {
+      execSync('npm run db:seed:test', { stdio: 'ignore' });
+      summit = (await (await request.get('/')).text()).match(/href="\/events\/([^/"]+)\/grid"/)![1]!;
+    });
+
+    test('v7 after lock, the keynote moves 15, the rain call executes at its decide-by', async ({ page }) => {
+      test.setTimeout(90_000);
+
+      // 1. The 11pm v7: the lock holds until a producer overrides it, and only the rebuild distributes it.
+      await page.goto(`/events/${summit}/content`);
+      const hollis = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Hollis Grant/ }) });
+      await hollis.getByRole('button', { name: /Reissue portal link/ }).click();
+      await page.getByRole('status').getByRole('link', { name: 'open' }).click();
+      await page.getByLabel('File for Session deck').setInputFiles({ ...(await deck(false)), name: 'hollis-grant-deck-v7.pdf' });
+      await page.getByRole('button', { name: 'Upload' }).click();
+      await expect(page.locator('li').filter({ hasText: /^v7 / })).toContainText('needs review');
+      await expect(page.locator('li').filter({ hasText: /^v6 / })).toContainText('show file');
+
+      await page.goto(`/events/${summit}/content`);
+      const v7 = hollis.locator('li').filter({ hasText: /^v7 / });
+      await v7.getByLabel('Override reason').fill('Speaker revised Q3 figures at 11pm');
+      await v7.getByRole('button', { name: 'Override lock to this version' }).click();
+      await expect(hollis).toContainText('Lock 2: override v7');
+
+      await page.goto(`/events/${summit}/packages`);
+      const ballroomA = page.getByRole('region', { name: 'Ballroom A — playback' });
+      await expect(ballroomA).toContainText('STALE — rebuild');
+      await ballroomA.getByRole('button', { name: 'Rebuild package' }).click();
+      await expect(ballroomA.getByRole('row').filter({ hasText: 'Keynote: The next five years' })).toContainText('Session deck v7');
+
+      // 2. The keynote moves 15: publish, the live run sheet flags stale, the rebase re-issues only the sheets that moved.
+      await page.goto(`/events/${summit}/grid`);
+      const row = page.locator('form').filter({ has: page.locator(title(KEYNOTE)) });
+      await row.getByLabel('Start').fill('09:15');
+      await row.getByLabel('End').fill('10:15');
+      await row.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByText('No conflicts.')).toBeVisible();
+      await page.getByRole('button', { name: 'Publish version 2' }).click();
+      await expect(page.getByText('Published: version 2.')).toBeVisible();
+
+      await page.goto(`/events/${summit}/live`);
+      await page.getByRole('button', { name: 'Rebase and re-issue call sheets' }).click();
+      await expect(page.getByRole('status')).toHaveText('Call sheets re-issued: A1 Audio, Doors & Registration.');
+      await expect(page.getByText('published past this run sheet')).toHaveCount(0);
+
+      // 3. The rain call, still open before its decide-by cue and never escalated, executes as one commit.
+      await page.goto(`/events/${summit}/contingency`);
+      const rain = page.getByRole('region', { name: 'Rain call: closing reception' });
+      await expect(rain.getByRole('heading').first()).toContainText('open');
+      await expect(rain).toContainText(/Decide by 10:00 /);
+      await expect(page.getByRole('region', { name: 'Escalation outbox' })).not.toContainText('Rain call');
+
+      await rain.getByRole('link', { name: 'Preview Rain: move to Ballroom A' }).click();
+      const preview = rain.getByRole('region', { name: 'Preview' });
+      await expect(preview).toContainText(/Closing reception: 17:00–18:30 .*, Lakeview Terrace → 17:30–19:00 .*, Ballroom A/);
+      await expect(preview).toContainText('Call sheets re-issued: Catering, Doors & Registration.');
+      await preview.getByRole('button', { name: 'Execute Rain: move to Ballroom A' }).click();
+
+      await expect(rain.getByRole('heading').first()).toContainText('decided');
+      const log = rain.getByRole('region', { name: 'Decision log' });
+      await expect(log).toContainText('Budget: $3,800.00 committed');
+      await expect(log).toContainText(/Call sheets re-issued: Catering \(issue \d+\), Doors & Registration \(issue \d+\)\./);
+      await expect(rain.getByRole('row').filter({ hasText: 'Dry: hold on the terrace' })).toContainText('not taken');
     });
   });
 });

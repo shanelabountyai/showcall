@@ -666,3 +666,33 @@ S-22.
 **Verdict.** Validated. Producer review #5 asked for venue facts as data
 rather than notes. Once they are data, the cascade can refuse a load plan the
 building cannot take, and that is the useful part.
+
+## Phase 4 gate: the capstone (S-19)
+
+One e2e test runs the PRD's five-minute story in order on a fresh seed.
+Hollis Grant uploads a v7 after lock. The lock holds until a producer
+overrides it with a reason, and the Ballroom A package goes stale until it is
+rebuilt. Next, the opening keynote moves 15 minutes and publishes as v2. The
+live run sheet flags stale, and the rebase re-issues only the A1 Audio and
+Doors & Registration sheets. Catering is untouched. Finally, the rain call is
+still open before its 10:00 decide-by cue and has never escalated. It
+previews, then executes as one commit that moves the reception, posts $3,800,
+re-issues Catering and Doors & Registration, and archives the dry branch.
+26/26 e2e on a production build.
+
+**Defects found.** One visibility gap. The rebase re-issued the right call
+sheets, but nothing on the page said which ones, so "filtered re-issues"
+could not be seen in a demo. The live page now names them after a rebase. The
+capstone also caught a race in its own first draft: the test left the portal
+before the upload landed. The test was fixed, not the app.
+
+**What it deliberately does not do.** The browser does not wait for the
+clock to reach the decide-by. The live page reads the system clock, and the
+rain call's cue is tomorrow at 10:00. The capstone shows the call made while
+still open and never escalated. The escalation at the deadline is covered by
+unit tests on an injected clock (S-16). Injecting a clock into the production
+server would put a second "now" into the shipped app, against hard rule 3.
+
+**Verdict.** The P0 set is validated end to end. The capstone re-seeds
+itself, so the earlier blocks can spend the seed's v7, keynote and rain call
+without an ordering trap.

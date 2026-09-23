@@ -1,14 +1,10 @@
 # Next
 
-**S-19 — Phase 4 gate, the capstone.** See `docs/backlog.md` Phase 4. e2e on a production build, running the PRD's
-five-minute story: v7 after lock, the keynote moves 15 minutes, and the rain call executes at its decide-by cue. Model pick:
-Opus. This is a gate, and it crosses every cascade path.
+**S-20 — P1-5 post-event reconciliation.** Planned vs. actual cue times from the GO log (D-010), final attrition math,
+budget close. See `docs/backlog.md` P1. Model pick: Opus (it is money: budget close and attrition math).
 
-What S-19 inherits from S-18:
-- Venue rules are cascade problems (D-024). A rebase or branch that breaks dock hours, bays or a room's rigging/power/trim is refused like a compression.
-- The live page's stale warning has **Rebase and re-issue call sheets**. The e2e rain spec clicks it first, because the keynote story leaves the sheet on v1.
-- The seeded AV load-out is anchored to the reception, so the rain call moves it 19:00–22:00 → 19:30–22:30, and the preview shows it.
-- The full sweep, not a subset, is the gate. CI runs no e2e. S-17's rain spec was green only when run alone.
-- The e2e sweep still executes the seeded rain call, so the capstone must run before that spec or re-seed.
+State: S-19 shipped, the Phase 4 capstone. 187 vitest tests pass; the full e2e sweep passes 26/26 against a production
+build. The capstone re-seeds itself at the end of the sweep, so the DB is left in its post-story state.
 
-State: S-18 shipped (D-024). 187 vitest tests pass; the full e2e sweep passes 25/25 against a production build.
+The P0 set is complete. Project closure (DEMO.md is done; still owed: the exec brief and LinkedIn posts) can come now or
+after the P1s. Shane decides.
