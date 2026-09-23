@@ -696,3 +696,33 @@ server would put a second "now" into the shipped app, against hard rule 3.
 **Verdict.** The P0 set is validated end to end. The capstone re-seeds
 itself, so the earlier blocks can spend the seed's v7, keynote and rain call
 without an ordering trap.
+
+## Post-event reconciliation (P1-5, S-20)
+
+A new page at `/events/<id>/reconcile` answers three questions after a show.
+**Where did it slip?** Each room and day lists planned against actual time for
+every run-sheet row, taken from the stage managers' GO log. Planned is the
+start the row had when GO was called, so a later rebase cannot turn an on-time
+cue into a late one. An *added* column shows how much later each row ran than
+the row before it, so the report names the cue the delay came from and not
+just the final lateness. **What does the hotel get?** The hotel is owed the
+worst threshold shortfall at the block rate, never the sum. That figure is set
+against what has already been accepted onto the budget. **Can the budget
+close?** Only after the show has ended, and only when every committed line has
+its invoice, every threshold has passed and no attrition is owed without being
+on the budget. Each blocker is named. The close is a final snapshot. After it,
+a database trigger refuses any write to the event's lines, including a write
+that races the close (D-025).
+
+**Defects found.** None in the shipped code. The first e2e draft assumed the
+seed had no GO history. The seed already has most of a day of it, and the page
+showed it correctly (a +8 min keynote, and a wrap that added 54 minutes). The
+spec was fixed.
+
+**What it deliberately does not do.** No way to reopen a closed budget. No
+crew overtime in the report (S-22). No client sign-off on the close (S-23). A
+mistaken GO on a row that is never GO'd again stays in the record, because the
+log cannot tell it from a real one.
+
+**Verdict.** Validated. The GO log (D-010) was designed append-only so this
+report would exist. It needed no new capture, only a read.

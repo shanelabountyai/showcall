@@ -59,7 +59,7 @@ See D-012 for the reasoning kept out of this table; D-017 for S-10's.
 
 | ID | Item | Status |
 |---|---|---|
-| S-20 | P1-5 post-event reconciliation: planned vs. actual cue times from the GO log (D-010), final attrition math, budget close | ⬜ |
+| S-20 | P1-5 post-event reconciliation: planned vs. actual cue times from the GO log (D-010), final attrition math, budget close | ✅ |
 | S-21 | P1-3 vendor/crew portal: tokenized sheet, COI upload, receipt confirmation that clears the re-issue flag | ⬜ |
 | S-22 | P1-1 crew work rules as data: breaks, meal-penalty and overtime warnings during run-sheet edits | ⬜ |
 | S-23 | P1-6 client approval gates on budget and scope changes | ⬜ |

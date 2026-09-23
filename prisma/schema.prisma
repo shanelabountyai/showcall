@@ -601,6 +601,9 @@ model BudgetSnapshot {
   actualCents    Int
   billableCents  Int
   lines          Json
+  /// The close (D-025): at most one per event (partial unique index), and
+  /// once it exists the database refuses every write to the event's lines.
+  final          Boolean  @default(false)
   event          Event    @relation(fields: [eventId], references: [id])
   eventId        String
 

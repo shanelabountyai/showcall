@@ -1,3 +1,4 @@
+import { BudgetRefused } from '@/src/budget/budget';
 import { notFound } from 'next/navigation';
 import { systemClock } from '@/src/clock';
 import { contingencyBoard, ContingencyRefused, executeBranch, previewBranch, type PlanState } from '@/src/contingency/contingency';
@@ -43,7 +44,7 @@ export default async function Contingency({ params, searchParams }: { params: Pr
   async function doExecute(form: FormData) {
     'use server';
     const expected = JSON.parse(String(form.get('expected'))) as Moved[];
-    await refusable(here, () => executeBranch(String(form.get('planId')), String(form.get('branchId')), expected, systemClock), ContingencyRefused, CascadeChanged, CascadeBlocked);
+    await refusable(here, () => executeBranch(String(form.get('planId')), String(form.get('branchId')), expected, systemClock), ContingencyRefused, CascadeChanged, CascadeBlocked, BudgetRefused);
   }
   const sent = board.plans.flatMap((p) => p.escalations.map((e) => ({ ...e, title: p.title }))).sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
 

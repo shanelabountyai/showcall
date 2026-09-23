@@ -1,3 +1,4 @@
+import { BudgetRefused } from '@/src/budget/budget';
 import { notFound } from 'next/navigation';
 import { addThreshold, AttritionRefused, attritionBoard, createBlock, decide, framing, reserve, type Assessment } from '@/src/attrition/attrition';
 import { systemClock } from '@/src/clock';
@@ -34,7 +35,7 @@ export default async function Rooms({ params, searchParams }: { params: Promise<
 
   async function doDecide(form: FormData) {
     'use server';
-    await refusable(here, () => decide(String(form.get('thresholdId')), String(form.get('choice')) as AttritionChoice, Number(form.get('expected')), systemClock), AttritionRefused);
+    await refusable(here, () => decide(String(form.get('thresholdId')), String(form.get('choice')) as AttritionChoice, Number(form.get('expected')), systemClock), AttritionRefused, BudgetRefused);
   }
 
   async function doBlock(form: FormData) {

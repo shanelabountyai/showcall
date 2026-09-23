@@ -630,3 +630,44 @@ in one action, refused whole on any problem (venue problems included). Then it
 re-issues the sheets the rebase changed, so the next change re-issues only its
 own sheets. CI runs no e2e, so the full sweep on a production build is the
 gate at each item, not a subset of specs.
+
+## D-025 · 2026-09-23 · Reconciliation: slip from the GO log, attrition nets to the worst shortfall, the close is a freeze the database holds
+
+Shane picked S-20 ahead of project closure, so the brief and the posts will
+cover the P1 scope. Nothing else in this entry needed his call.
+
+**Planned vs. actual reads the GO log and stores nothing.** A row's actual
+time is its latest GO, because a later GO corrects an earlier one (D-010).
+Planned is the `plannedMin` stamped when GO was called, not the row's time
+today. A rebase or a rain call after the fact does not make an on-time cue
+look late. *Added* is a row's slip minus the slip of the previous called row
+in the room, so the report names the cue where the delay came from, not only
+how late the day ended. A GO on a row the run sheet has since dropped still
+happened, so it stays in the report. Limit: a mistaken GO on a row that is
+never GO'd again stays in the record as an actual time. The log cannot tell a
+wrong GO from a right one.
+
+**Final attrition reuses `assess()`.** After the last threshold, each one is
+judged as of its own date. The hotel is owed the worst shortfall × rate, not
+the sum, the same netting as D-020. A positive gap (owed − accepted) blocks
+the close, and the fix is the existing accept on the rooms page, so no second
+path posts attrition. A negative gap means an accept was made on a projection
+that later bookings beat. That is over-accrual: it is shown and does not
+block. The hotel's invoice is the actual, and the producer can adjust the
+line's committed figure.
+
+**The close is a final snapshot (`BudgetSnapshot.final`, one per event by a
+partial unique index).** Once it exists, a trigger refuses every insert,
+update or delete on the event's budget lines. The module refuses first with a
+`BudgetRefused` in words, and the trigger backstops any path the module does
+not cover. The close takes `FOR UPDATE` on the event row, and the trigger
+takes `FOR SHARE`, so a line write that races the close waits for it and is
+then refused. The close is refused, with every blocker named, while the show
+is not over, while a committed line has no actual ("awaiting invoice", and a
+cancelled line gets its committed set to $0), while a threshold has not
+passed, or while attrition is owed but not posted. It carries the actual total
+the producer saw and is refused if that total has moved.
+
+Not done: reopening a closed budget (there is no path to reopen by design;
+correcting a mistake would be a new event-level decision), per-crew overtime
+in the reconciliation (S-22), and client sign-off on the close (S-23).

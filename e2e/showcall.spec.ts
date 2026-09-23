@@ -122,6 +122,17 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(ballroom.getByRole('button', { name: 'GO' })).toHaveCount(0);
     });
   });
+  test.describe('reconciliation (S-20)', () => {
+    test('the GO just called shows as planned vs. actual, and the close waits for the show to end', async ({ page }) => {
+      await page.goto(`/events/${eventId}/reconcile`);
+      const ballroom = page.getByRole('article', { name: /^Ballroom A / });
+      await expect(ballroom.getByRole('row').filter({ hasText: KEYNOTE })).toContainText('+8 min'); // from the seeded GO log
+      await expect(ballroom.getByRole('row').last()).not.toContainText('not called'); // the GO Priya just called
+      await expect(page.getByRole('list', { name: 'Close blockers' })).toContainText('The show runs through');
+      await expect(page.getByRole('button', { name: /Close the budget/ })).toHaveCount(0);
+    });
+  });
+
   test.describe('content turn-in (S-8, S-9)', () => {
     test('a producer issues a link; the speaker uploads, sees what to fix, and fixes it', async ({ page }) => {
       await page.goto(`/events/${eventId}/content`);

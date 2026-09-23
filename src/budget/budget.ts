@@ -21,10 +21,18 @@ function cents(n: number, what: string) {
 
 export type LineInput = { category: BudgetCategory; description: string; committedCents: number; clientBillable?: boolean; vendorId?: string | null };
 
+/** The database refuses writes to a closed budget (D-025); this says so in words first. */
+async function assertOpen(db: Tx, eventId: string) {
+  if (await db.budgetSnapshot.findFirst({ where: { eventId, final: true }, select: { id: true } })) {
+    throw new BudgetRefused('The budget is closed: the close froze every line, and nothing more posts to it');
+  }
+}
+
 /** `db` lets a feature post its line inside its own transaction, so the line and its reason land together. */
 export async function addLine(eventId: string, input: LineInput, db: Tx = prisma) {
   const description = input.description.trim();
   if (!description) throw new BudgetRefused('A budget line needs a description');
+  await assertOpen(db, eventId);
   return db.budgetLine.create({
     data: {
       eventId, category: input.category, description, committedCents: cents(input.committedCents, 'Committed'),
@@ -35,6 +43,9 @@ export async function addLine(eventId: string, input: LineInput, db: Tx = prisma
 
 /** Actuals arrive as invoices do; a change order moves the commitment. Either way the old figure lives in the snapshots. */
 export async function updateLine(lineId: string, change: { committedCents?: number; actualCents?: number }) {
+  const line = await prisma.budgetLine.findUnique({ where: { id: lineId }, select: { eventId: true } });
+  if (!line) throw new BudgetRefused('No such budget line');
+  await assertOpen(prisma, line.eventId);
   return prisma.budgetLine.update({
     where: { id: lineId },
     data: {
@@ -94,19 +105,22 @@ export async function budgetToActuals(eventId: string) {
 export async function takeSnapshot(eventId: string, label: string, clock: Clock) {
   const name = label.trim();
   if (!name) throw new BudgetRefused('A snapshot needs a label — "client v2", "post-RFP", whatever it will be looked up by');
-  return prisma.$transaction(async (tx) => {
-    const lines = await tx.budgetLine.findMany({ where: { eventId }, orderBy: [{ category: 'asc' }, { description: 'asc' }], include: { vendor: { select: { name: true } } } });
-    const frozen: FrozenLine[] = lines.map((l) => ({
-      id: l.id, category: l.category, description: l.description, vendor: l.vendor?.name ?? null,
-      committedCents: l.committedCents, actualCents: l.actualCents, clientBillable: l.clientBillable,
-    }));
-    const { total } = summarize(frozen);
-    const number = (await tx.budgetSnapshot.count({ where: { eventId } })) + 1;
-    return tx.budgetSnapshot.create({
-      data: {
-        eventId, number, label: name, takenAt: clock.now(), lines: frozen,
-        committedCents: total.committed, actualCents: total.actual, billableCents: total.billableCommitted,
-      },
-    });
+  return prisma.$transaction((tx) => snapshot(tx, eventId, name, clock));
+}
+
+/** The snapshot itself, inside the caller's transaction; `final` makes it the close (D-025). */
+export async function snapshot(tx: Tx, eventId: string, label: string, clock: Clock, final = false) {
+  const lines = await tx.budgetLine.findMany({ where: { eventId }, orderBy: [{ category: 'asc' }, { description: 'asc' }], include: { vendor: { select: { name: true } } } });
+  const frozen: FrozenLine[] = lines.map((l) => ({
+    id: l.id, category: l.category, description: l.description, vendor: l.vendor?.name ?? null,
+    committedCents: l.committedCents, actualCents: l.actualCents, clientBillable: l.clientBillable,
+  }));
+  const { total } = summarize(frozen);
+  const number = (await tx.budgetSnapshot.count({ where: { eventId } })) + 1;
+  return tx.budgetSnapshot.create({
+    data: {
+      eventId, number, label, final, takenAt: clock.now(), lines: frozen,
+      committedCents: total.committed, actualCents: total.actual, billableCents: total.billableCommitted,
+    },
   });
 }

@@ -1,3 +1,4 @@
+import { BudgetRefused } from '@/src/budget/budget';
 import { notFound } from 'next/navigation';
 import { systemClock } from '@/src/clock';
 import { prisma } from '@/src/db';
@@ -67,7 +68,7 @@ export default async function Rfps({ params, searchParams }: { params: Promise<{
   }
   async function doAward(form: FormData) {
     'use server';
-    await refusable(here, () => award(String(form.get('quoteId')), Number(form.get('expected')), systemClock), RfpRefused);
+    await refusable(here, () => award(String(form.get('quoteId')), Number(form.get('expected')), systemClock), RfpRefused, BudgetRefused);
   }
   async function doAdvance(form: FormData) {
     'use server';

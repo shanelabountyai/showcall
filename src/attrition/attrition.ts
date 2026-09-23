@@ -123,7 +123,7 @@ export function framing(a: Assessment) {
 
 // ── Database ────────────────────────────────────────────────────────────────
 
-const blockInclude = {
+export const blockInclude = {
   hotel: { select: { name: true } },
   nights: { orderBy: { night: 'asc' }, include: { released: { include: { decision: { select: { decidedOn: true } } } } } },
   thresholds: { orderBy: { dueOn: 'asc' } },
@@ -134,7 +134,7 @@ const blockInclude = {
 type LoadedBlock = NonNullable<Awaited<ReturnType<typeof loadBlock>>>;
 const loadBlock = (db: Tx, blockId: string) => db.roomBlock.findUnique({ where: { id: blockId }, include: blockInclude });
 
-function contractOf(b: LoadedBlock): Contract {
+export function contractOf(b: LoadedBlock): Contract {
   return {
     rateCents: b.rateCents, contractedOn: fromDbDate(b.contractedOn), cutoffOn: fromDbDate(b.cutoffOn),
     nights: b.nights.map((n) => ({ night: fromDbDate(n.night), rooms: n.rooms })),
