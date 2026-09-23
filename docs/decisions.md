@@ -261,3 +261,52 @@ projection deliberately. This closes D-008's "the snapshot has no speaker ids".
 Snapshots published before this carry none and contribute nothing to a
 package; republish to fill them. Sponsor deliverables have no room, so they are
 in neither package yet.
+
+## D-017 · 2026-09-23 · Deadlines derive from the agenda; the cadence is a unique key
+
+Shane's picks were not needed here — these follow from rules already set, and
+are recorded because each had a tempting wrong answer.
+
+**A deadline is never stored.** It is the owner's first call minus the lead
+time for that kind: `addDays(callDay, -leadDays)`, computed on read
+(`src/chase/chase.ts`). "First call" is the owner's earliest session, rehearsal
+included — which is what makes the validation/rehearsal lead the PRD asks for
+fall out for free, since a rehearsal *is* a session (D-013). So moving a
+speaker's session moves their deadline with it, and there is no stored date to
+go stale. This is D-003's rule applied to turn-in, and the alternative — a
+`dueAt` column set when a deliverable is created — is exactly the silent drift
+the project exists to avoid.
+
+**Lead time is data, per event and kind** (`DeadlinePolicy`), like
+`ValidationRule`. A kind with no policy shows **"no lead time set"** rather
+than falling back to a constant: a fabricated deadline is worse than an
+absent one, because a producer would chase against it. A second source of
+truth in code was the tempting shortcut; there is one source.
+
+**The reminder cadence is a unique key, not scheduling logic.** Steps are days
+before due — 14, 7, 3, 0, −3, −7 — and `Reminder` is unique on
+`(deliverableId, step)`. A step therefore cannot be sent twice however often
+the producer clicks, with no dedupe code and no lock. `cadenceStep(daysLeft)`
+returns the *most urgent step reached*, so **a skipped step never fires
+retroactively**: a board opened for the first time a week late sends one
+reminder, not the four it "missed". The alternative — replaying every missed
+step — would deliver a burst of stale mail to someone who is already behind.
+
+**The outbox row is the send.** There is no mail transport behind it,
+deliberately: what a producer needs is proof it went out and when, and the
+row is append-only (trigger) so it is kept exactly as sent. The body is
+rendered once, at send time, and stored — never re-rendered later against a
+deadline that has since moved.
+
+**The chase board can only chase a deliverable that exists.** No phantom rows
+are synthesised for a speaker who was never asked for a deck. That pushed a
+change into the seed instead: every booked speaker gets a `Session deck`
+deliverable, so the ones behind are overdue rows on the worklist rather than
+invisible. A speaker with nothing on the board is a producer who has not asked
+yet — which the bureau's missing-item flags say directly.
+
+**Missing-item flags are the guards' own messages.** `missingItems()` in
+`src/bureau/bureau.ts` is a superset of `contentMissing()` rather than a
+parallel list, and the "next step blocked" line is `nextStepBlocked()` — the
+same table `advance()` enforces. The board cannot disagree with the lifecycle
+about whether a deck is approved, because it is not forming its own opinion.

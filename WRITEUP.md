@@ -325,3 +325,67 @@ builder also became two packages. Playback plays a presenter's own deck in
 their own session and isn't gated. The attendee bundle is where consent
 belongs, and its no-path sweep (all 8 consent combinations plus unrecorded)
 landed with it (D-016).
+
+## Chase dashboard (P0-5, S-10)
+
+**Problem.** A producer's real question a month out is not "what has arrived"
+but "who is late, and by how much". That answer lives in four places at once —
+a spreadsheet of decks, the sponsor thread, the contract folder, the bureau's
+own lifecycle — and none of them knows the show date. The lead time is the
+part people get wrong: a deck is not due on show day, it is due early enough
+to clear validation *and* a rehearsal, and when the rehearsal moves, the
+deadline everyone wrote down does not.
+
+**What it does.** One board, sorted worst-first, over deliverables that
+already exist. Each row's deadline is derived, never stored: the owner's first
+call minus the event's lead time for that kind. "First call" is the owner's
+earliest session with rehearsals included, so the rehearsal lead the PRD asks
+for falls out of D-013's "a rehearsal is a session" rather than being coded
+twice — and moving a session moves the deadline with it. Lead times are data
+per event and kind (`DeadlinePolicy`), and a kind with no policy reads "no
+lead time set" instead of inheriting a constant: a fabricated deadline is
+worse than an absent one, because a producer chases against it.
+
+The reminder cadence — 14, 7, 3, 0, −3, −7 days — is enforced by a unique key
+on `(deliverableId, step)` rather than by scheduling code, so a step cannot be
+sent twice however often the button is clicked, with no dedupe logic and no
+lock. `cadenceStep()` returns the most urgent step *reached*, which means a
+skipped step never fires retroactively: a board opened for the first time a
+week late sends one reminder, not the four it "missed". The outbox row is the
+send — append-only, body rendered once at send time and kept as sent, so it
+can never be re-rendered against a deadline that has since moved.
+
+The bureau roll-up reuses the lifecycle's own machinery rather than forming a
+second opinion: `missingItems()` is a superset of `contentMissing()`, and the
+"next step blocked" line is `nextStepBlocked()` — the same guard table
+`advance()` enforces. The board cannot disagree with the lifecycle about
+whether a deck is approved. Stale distribution packages ride along from
+`packageStatus()` (D-016) with a link to rebuild, never an automatic one.
+
+**Hardest bug — the board could not see who was actually late.** The first
+render looked right and was quietly useless: eight rows, four sponsor items
+and four *locked* decks. Every speaker genuinely behind on a deck was absent
+from the escalation worklist entirely, showing up only in the missing-items
+list. The cause was upstream of the dashboard — the seed created a deck
+deliverable only for speakers already past `content_complete`, so the people
+being chased had nothing to chase. The tempting fix was to synthesise phantom
+rows in the board for speakers with no deliverable. That is the wrong answer:
+a deliverable is the record that something was asked for, and inventing one
+means the board asserts a debt nobody incurred. The fix went into the seed —
+every booked speaker owes a `Session deck` from the moment they are booked —
+and the board's rule stayed honest: it chases what exists. That change then
+broke an e2e spec (two deck deliverables meant two `Upload` buttons and a
+strict-mode violation), which is the right kind of breakage: the fixture told
+the truth about the product change.
+
+**Defects found.** The seed's own chase pass consumed the current cadence
+step, leaving the demo's "send due reminders" button dead at (0) with a full
+outbox. Fixed by running the seed's pass on a clock 28 days back — the
+injected clock (hard rule 3) is what made that a one-line change rather than a
+fixture rewrite, and the result is a better demo: history in the outbox *and*
+a live escalation today.
+
+**What it deliberately does not do.** No mail transport — the outbox row is
+the send, and a real one swaps in behind `sendDueReminders`. No per-owner
+reminder preferences or quiet hours. No decide-by cues (P1, D-016's phase 4).
+No automatic package rebuild, per D-016.

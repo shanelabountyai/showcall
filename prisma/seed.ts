@@ -11,7 +11,8 @@ import { saveSession } from '../src/agenda/grid';
 import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
-import { systemClock } from '../src/clock';
+import { sendDueReminders, setLeadDays } from '../src/chase/chase';
+import { DAY, fixedClock, systemClock } from '../src/clock';
 import { buildPackage } from '../src/content/distribution';
 import { approve } from '../src/content/lock';
 import { addDeliverable, addRule, addSponsor, issuePortalToken, submitVersion } from '../src/content/pipeline';
@@ -110,6 +111,15 @@ const rules: [Parameters<typeof addRule>[1], Parameters<typeof addRule>[2], obje
   ['video', 'codec_allowlist', { codecs: ['avc1', 'hvc1'] }, 'Export the video as H.264 or H.265 (HEVC) MP4.'],
 ];
 for (const [kind, check, params, fix] of rules) await addRule(event.id, kind, check, params, fix);
+
+// Turn-in lead times (P0-5 chase): days before the owner's first call. Decks
+// lead longest because they must clear validation *and* a rehearsal; print
+// artwork leads longer still. The deadline itself is never stored — it derives
+// from the agenda, so a session move moves it (src/chase/chase.ts).
+const leads: [Parameters<typeof setLeadDays>[1], number][] = [
+  ['deck', 21], ['headshot', 30], ['logo', 30], ['banner', 30], ['booth_info', 14], ['video', 14],
+];
+for (const [kind, days] of leads) await setLeadDays(event.id, kind, days);
 for (const name of ['Contoso Health', 'Fabrikam Medical Devices']) {
   const sponsor = await addSponsor(event.id, name);
   await addDeliverable(event.id, { sponsorId: sponsor.id }, 'logo', `${name} logo`);
@@ -132,8 +142,11 @@ for (const [name, plan] of Object.entries(bureauPlan)) {
     await saveSession(event.id, { title: `Rehearsal — ${name}`, day: d1, roomId: room[plan.rehearsal].id, startMin: at(7, 30), endMin: at(8), speakerIds: [speakerId], isRehearsal: true });
   }
   if (plan.consent) await setConsent(speakerId, plan.consent, systemClock);
+  // Every speaker owes a deck from the moment they are booked: the chase
+  // board can only chase a deliverable that exists, so the ones still behind
+  // are the overdue rows on it.
+  const deck = await addDeliverable(event.id, { speakerId }, 'deck', 'Session deck');
   if (LIFECYCLE.indexOf(plan.target) >= LIFECYCLE.indexOf('content_complete')) {
-    const deck = await addDeliverable(event.id, { speakerId }, 'deck', 'Session deck');
     const token = await issuePortalToken({ speakerId });
     const file = (bytes: Uint8Array, filename: string) => ({ filename, mimeType: 'application/pdf', bytes });
     if (name === 'Hollis Grant') {
@@ -176,6 +189,10 @@ for (const day of [d1, d2]) {
 }
 await issueCallSheets(event.id, systemClock);
 
+// A chase pass a month ago, so the outbox has history and today's board still
+// owes the escalation step — the clock is injected exactly so this is possible.
+const reminders = await sendDueReminders(event.id, fixedClock(new Date(systemClock.now().getTime() - 28 * DAY))).catch(() => 0);
+
 // Every package built once, so the demo starts current and a late override shows the stale flag.
 for (const r of Object.values(room)) await buildPackage(event.id, { audience: 'room', roomId: r.id }, systemClock);
 await buildPackage(event.id, { audience: 'attendees' }, systemClock);
@@ -214,5 +231,5 @@ for (const row of due) {
 }
 
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
-console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks. /events/${event.id}/live`);
+console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders. /events/${event.id}/live`);
 await prisma.$disconnect();

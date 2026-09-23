@@ -39,6 +39,7 @@ model Event {
   deliverables Deliverable[]
   rules        ValidationRule[]
   packages     DistributionPackage[]
+  deadlines    DeadlinePolicy[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -324,6 +325,7 @@ model Deliverable {
   sponsorId String?
   versions  ContentVersion[]
   locks     ShowFileLock[]
+  reminders Reminder[]
 
   @@index([eventId])
 }
@@ -453,4 +455,34 @@ model DistributionPackage {
   roomId        String?
 
   @@index([eventId, audience, roomId])
+}
+
+/// How far before the show a kind of deliverable is due (P0-5 chase). Lead
+/// time is data, per event and kind, like ValidationRule — the deadline
+/// itself is never stored: it derives from the owner's first call time minus
+/// this (src/chase/chase.ts), so a session move moves the deadline with it.
+model DeadlinePolicy {
+  id       String          @id @default(cuid())
+  kind     DeliverableKind
+  leadDays Int
+  event    Event           @relation(fields: [eventId], references: [id])
+  eventId  String
+
+  @@unique([eventId, kind])
+}
+
+/// The reminder outbox. Append-only (trigger): what went out, as it went out.
+/// One row per deliverable per cadence step — the unique key is the cadence,
+/// so no step can be sent twice however often the producer clicks.
+model Reminder {
+  id            String      @id @default(cuid())
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id])
+  deliverableId String
+  /// Days before due that this reminder covers; negative is after (overdue).
+  step          Int
+  to            String
+  body          String
+  sentAt        DateTime
+
+  @@unique([deliverableId, step])
 }

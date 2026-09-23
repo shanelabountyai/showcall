@@ -42,6 +42,12 @@ export const fromHhmm = (s: string) => {
 /** 545 → '09:05', for an `<input type="time">`. */
 export const inputTime = (min: number) => hhmm(min).padStart(5, '0');
 
+/** `d` shifted by whole days — the anchor math a derived deadline is built from. */
+export const addDays = (d: LocalDate, n: number): LocalDate => fromDbDate(new Date(toDbDate(d).getTime() + n * 86_400_000));
+
+/** Whole days from `from` to `to`; negative once `to` is past. */
+export const daysUntil = (from: LocalDate, to: LocalDate) => Math.round((toDbDate(to).getTime() - toDbDate(from).getTime()) / 86_400_000);
+
 /** Every day from `start` to `end` inclusive. */
 export function daysBetween(start: LocalDate, end: LocalDate): LocalDate[] {
   const days: LocalDate[] = [];

@@ -134,13 +134,15 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await page.getByRole('status').getByRole('link', { name: 'open' }).click();
       await expect(page.getByRole('heading', { name: /content for Keiko Brandt/ })).toBeVisible();
 
+      // Keiko owes a Session deck too (every speaker does), so scope to this one.
+      const item = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Staffing models deck (deck)' }) });
       await page.getByLabel('File for Staffing models deck').setInputFiles(await deck(true));
-      await page.getByRole('button', { name: 'Upload' }).click();
+      await item.getByRole('button', { name: 'Upload' }).click();
       await expect(page.getByText(/Fix: Embed your fonts/)).toBeVisible();
       await expect(page.getByText('Fonts not embedded: Helvetica')).toBeVisible();
 
       await page.getByLabel('File for Staffing models deck').setInputFiles(await deck(false));
-      await page.getByRole('button', { name: 'Upload' }).click();
+      await item.getByRole('button', { name: 'Upload' }).click();
       // The brand-template check is manual (D-016), so v2 waits on the producer.
       await expect(page.locator('li').filter({ hasText: /^v2 deck-v2\.pdf/ })).toContainText('needs review');
       await expect(page.locator('li').filter({ hasText: /^v1 deck-v1\.pdf/ })).toContainText('failed');
@@ -169,6 +171,36 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     test('a bad portal token is a plain 404', async ({ page }) => {
       const res = await page.goto('/portal/not-a-real-token');
       expect(res?.status()).toBe(404);
+    });
+  });
+
+  test.describe('chase dashboard (S-10)', () => {
+    test('deadlines derive from the agenda, and the cadence sends each step once', async ({ page }) => {
+      await page.goto(`/events/${eventId}/chase`);
+      const worklist = page.getByRole('region', { name: 'Escalation worklist' });
+
+      // Ravi never submitted: his deck is overdue against a deadline nobody typed in.
+      const ravi = worklist.getByRole('row').filter({ hasText: 'Ravi Menon' });
+      await expect(ravi).toContainText('OVERDUE');
+      await expect(ravi).toContainText('nothing submitted');
+      // Keiko's approved deck is off the chase entirely.
+      await expect(worklist.getByRole('row').filter({ hasText: 'Staffing models deck' })).toContainText('locked');
+
+      const send = page.getByRole('button', { name: /Send due reminders \(\d+\)/ });
+      await expect(send).toBeEnabled();
+      await send.click();
+
+      // Every owed step has gone out, so the cadence owes nothing until the next one.
+      await expect(page.getByRole('button', { name: 'Send due reminders (0)' })).toBeDisabled();
+      await expect(page.getByRole('region', { name: 'Reminder outbox' })).toContainText('Ravi Menon');
+      await expect(ravi).toContainText('step -7');
+    });
+
+    test('a missing item is the lifecycle guard\'s own message, not a second opinion', async ({ page }) => {
+      await page.goto(`/events/${eventId}/chase`);
+      const missing = page.getByRole('region', { name: 'Missing items' });
+      await expect(missing.getByRole('listitem').filter({ hasText: 'Ravi Menon' }))
+        .toContainText('next (content complete) blocked: needs a bio and an approved deck');
     });
   });
 });

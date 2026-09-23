@@ -28,6 +28,21 @@ export function contentMissing(c: Pick<GuardCtx, 'bio' | 'deckLocked'>): string[
   return [...(!c.bio.trim() ? ['a bio'] : []), ...(!c.deckLocked ? ['an approved deck'] : [])];
 }
 
+/**
+ * Everything a speaker still owes, for S-10's chase board — a superset of
+ * `contentMissing`, which stays the guard's own half so the two can never
+ * disagree about a bio or a deck.
+ */
+export function missingItems(c: GuardCtx & { headshotUrl: string | null }): string[] {
+  return [
+    ...(!c.headshotUrl ? ['a headshot'] : []),
+    ...(c.contractSignedAt == null ? ['a signed contract'] : []),
+    ...(c.honorariumCents == null ? ['an honorarium'] : []),
+    ...contentMissing(c),
+    ...(c.consentRecordedAt == null ? ['consent on file'] : []),
+  ];
+}
+
 /** The deck half of the guard, over the shape `deckQuery` selects. */
 export type DeckState = { locks: unknown[] }[];
 export const deckLocked = (decks: DeckState) => decks.length > 0 && decks.every((d) => d.locks.length > 0);
