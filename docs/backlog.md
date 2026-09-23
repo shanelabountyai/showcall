@@ -52,7 +52,7 @@ See D-012 for the reasoning kept out of this table; D-017 for S-10's.
 |---|---|---|
 | S-16 | Contingency plans as data (P0-7, part 1): trigger criteria, decide-by time, owner, branches each carrying a cascade (run-sheet variant, vendor notifications, cost delta); the decide-by enters the run sheet as a cue; an unmade decision escalates at its deadline (outbox + dashboard) | ✅ |
 | S-17 | Branch execution (P0-7, part 2): execute → preview → atomic commit through the existing cascade; the branch that was not taken is archived with the decision log; cost delta posts to the budget; the rain-call fixture swaps the variant and re-issues **exactly** the affected call sheets | ✅ |
-| S-18 | Venue profiles (P0-8 rest): dock, power, rigging, ceiling, wifi, union house rules as structured data; load-in / load-out slots planned against them as production cues | ⬜ |
+| S-18 | Venue profiles (P0-8 rest): dock, power, rigging, ceiling, wifi, union house rules as structured data; load-in / load-out slots planned against them as production cues | ✅ |
 | S-19 | Phase 4 gate — the capstone: e2e on a production build, the PRD's five-minute story (v7 after lock, keynote moves 15 min, rain call executes at its decide-by cue) | ⬜ |
 
 ### P1, ranked — after the capstone
@@ -71,3 +71,31 @@ Budget goes first because it is the sink: attrition exposure (S-13), RFP
 awards (S-14) and contingency cost deltas (S-17) all post into it, so each
 of those writes to a real ledger instead of having one added later — the
 same reasoning as D-012. See D-018 for the rest, including the P1 ranking.
+
+
+---
+
+## Security findings — saas-foundation audit (2026-09-23)
+
+Source: `~/Projects/saas foundation/audit/showcall.md` (full scorecard K1–K14 and evidence). Read-only audit; line numbers are as of 2026-09-23 — **re-verify before fixing**. IDs are `SEC-nn` / `OPS-nn` so they cannot collide with this repo's numbering; convert to a native item when picked up.
+
+### Gaps
+
+| ID | Sev | Finding + exploit | Fix | Acceptance test |
+|---|---|---|---|---|
+| SEC-01 | HIGH (blocks any deploy) | **No authentication anywhere.** Every page and `'use server'` action is unguarded (K3 evidence). Exploit on any reachable URL: anyone can read budgets, contracts and speaker honoraria (`speakers/page.tsx:55`), download every uploaded deck (`content/file/[versionId]/route.ts`), create events, award RFPs, override content locks and record GO marks as any stage manager (`live/page.tsx:30` takes `staffId` from the form). Server actions are POST endpoints that can be called directly, so hiding the UI does not protect them. | Before any deploy: add auth, for example the saas-foundation session kit with a `requireStaff()` guard at the top of every action and page plus the file route. Keep `/portal/[token]` public. At minimum until then, Vercel deployment protection or basic auth over the whole app. | e2e: an unauthenticated GET `/events/<id>/budget` redirects to sign-in, and a direct server-action POST without a session is refused. A test enumerates every `'use server'` export and asserts that it calls the guard. |
+| SEC-02 | MED | **Cross-event writes by secondary id.** The K4 list: for example, `approve(versionId)` (`src/content/lock.ts:29`) is called from `/events/A/content` with a `versionId` from event B, and `updateLine(lineId)` (`src/budget/budget.ts:37`) does the same. Exploit (after auth or tenancy): a user of event A edits or locks event B's records by changing the hidden form field. | Pass `eventId` into each function and scope the lookup (`where: { id, deliverable: { eventId } }`), following `grid.ts:36,44`. Treat not-found and not-yours alike. | Unit test per function: calling with another event's id throws not-found and writes nothing. `grid.test.ts:56` is the model. |
+| SEC-03 | MED | **Anyone can reissue a speaker's or sponsor's portal link.** `doLink` (`content/page.tsx:59-67`) is unguarded and `issuePortalToken` overwrites the hash. Exploit: an attacker mints a new link for any speaker. That revokes the real speaker's link (DoS) and lets the attacker upload content that enters the lock and distribution pipeline under the speaker's name. | This is covered by SEC-01. Also log reissues against the actor. | Test: `doLink` without a staff session is refused, and a reissue writes an audit row. |
+| SEC-04 | LOW | **Portal token in a query string.** `content/page.tsx:66` puts `?link=<raw token>` in the URL, which ends up in browser history, proxy/access logs and screenshots. | Show the token once in the rendered response (a server action returning state) or via a flash cookie. Never put it in the URL. | Test: after `doLink`, the response URL contains no `link=` parameter. |
+| SEC-05 | LOW | **The portal has no expiry and no protective headers.** `app/portal/[token]/page.tsx` sets no `Cache-Control: no-store`, `Referrer-Policy: no-referrer` or `robots: noindex`, and the token has no expiry column (`schema.prisma:106-107`). A leaked link works until someone reissues it. | Add `portalTokenExpiresAt`, check it in `resolvePortal` and `ownerOf`. Add `metadata.robots` and headers for `/portal/*` in `next.config.ts`. | Test: an expired token returns 404, and the portal response has all three headers. |
+| SEC-06 | LOW | **No global security headers** (`next.config.ts`). Pages can be framed, and there is no HSTS or Referrer-Policy. | Add `headers()` with HSTS, `X-Frame-Options: DENY`/`frame-ancestors 'none'`, `Referrer-Policy`, nosniff. | Test: a production-build response for `/` carries the headers. |
+| SEC-07 | LOW | **Unthrottled public upload.** The portal accepts 25 MB uploads per request with no rate limit, and bytes are stored in Postgres (`pipeline.ts:91`). Exploit: someone with a leaked portal link can fill the DB. | Rate-limit per token in a shared store, and cap the number of versions per deliverable. | Test: the N+1th upload within the window is refused. |
+| SEC-08 | LOW | **Uploaded MIME type is echoed from the client.** `pipeline.ts:91` stores `file.type`, and the download returns it as `Content-Type`. This is mitigated by `attachment` plus `nosniff` (`route.ts:10-12`). | Allowlist MIME types (pdf, pptx, keynote, images, video) and default to `application/octet-stream`. | Test: an `text/html` upload is served as `application/octet-stream`. |
+
+### Ops items
+
+| ID | Item |
+|---|---|
+| OPS-01 | Do not connect the repo to Vercel, not even for previews, until SEC-01 lands. With git integration, every push creates a public preview URL, and in this app that means unauthenticated write access. |
+| OPS-02 | Add `SHOWCALL_ALLOW_CLOUD_DB` to `.env.example` as a name with a comment. |
+| OPS-03 | Confirm in the Vercel dashboard that no `showcall` project exists, since the API listing returned none (UNVERIFIED). |

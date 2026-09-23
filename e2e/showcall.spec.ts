@@ -365,6 +365,40 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     });
   });
 
+  test.describe('venue profile and load plan (S-18)', () => {
+    test('the house facts, what each room takes, and every slot at its billed call', async ({ page }) => {
+      await page.goto(`/events/${eventId}/rfps`);
+      await page.getByRole('link', { name: 'Venue', exact: true }).click();
+      await expect(page.getByRole('region', { name: 'Venue profile' })).toContainText('Dock: 2 bays, open 6:00–23:00, trucks up to 48 ft · Wifi 500 Mbps · Union house: 4h minimum call');
+      await expect(page.getByRole('region', { name: 'Rooms' }).getByRole('row').filter({ hasText: 'Lakeview Terrace' })).toContainText('open air');
+      const plan = page.getByRole('region', { name: 'Load plan' });
+      await expect(plan.getByRole('row').filter({ hasText: 'Load-in: Brightline AV' })).toContainText(/8:00–14:00.*2 × 48 ft.*8 points × 750 lb, 400 A, 20 ft trim.*6h/);
+      await expect(plan.getByRole('row').filter({ hasText: 'Load-in: Petal & Stem' })).toContainText(/6:00–7:00.*4h$/);
+      await expect(plan.getByRole('row').filter({ hasText: 'Load-out: Brightline AV' })).toContainText(/19:00–22:00.*Ballroom A.*4h$/);
+    });
+
+    test('a slot that overfills the dock is refused, naming the truck already there', async ({ page }) => {
+      await page.goto(`/events/${eventId}/venue`);
+      const plan = page.getByRole('region', { name: 'Load plan' });
+      await plan.getByLabel('Vendor').selectOption({ label: 'Petal & Stem' });
+      await plan.getByLabel('Day').selectOption({ index: 0 });
+      await plan.getByLabel('Start').fill('10:00');
+      await plan.getByRole('button', { name: 'Plan slot' }).click();
+      await expect(page.locator('p[role="alert"]')).toContainText('puts 3 trucks at the Lakeshore Grand Conference Center dock at 10:00');
+      await expect(page.locator('p[role="alert"]')).toContainText('(with "Load-in: Brightline AV"); it has 2 bays');
+      await expect(page.getByRole('region', { name: 'Load plan' }).getByRole('row')).toHaveCount(4);
+    });
+
+    test('closing the dock before the load-out ends is refused; the profile stands', async ({ page }) => {
+      await page.goto(`/events/${eventId}/venue`);
+      const profile = page.getByRole('region', { name: 'Venue profile' });
+      await profile.getByLabel('Dock closes').fill('21:00');
+      await profile.getByRole('button', { name: 'Save profile' }).click();
+      await expect(page.locator('p[role="alert"]')).toContainText(/"Load-out: Brightline AV" runs 19:00–22:00 .*; the Lakeshore Grand Conference Center dock is open 6:00–21:00/);
+      await expect(page.getByRole('region', { name: 'Venue profile' })).toContainText('open 6:00–23:00');
+    });
+  });
+
   test.describe('contingency plans (S-16)', () => {
     test('the rain call shows its decide-by, both branches and what each would tell vendors', async ({ page }) => {
       await page.goto(`/events/${eventId}/chase`);
@@ -380,11 +414,17 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     });
 
     test('the rain call executes: preview, commit, and only the sheets that carry the reception re-issue (S-17)', async ({ page }) => {
+      // The keynote story left the sheet on agenda v1; a producer rebases (and sends the sheets that moved) before calling it.
+      await page.goto(`/events/${eventId}/live`);
+      await page.getByRole('button', { name: 'Rebase and re-issue call sheets' }).click();
+      await expect(page.getByText('published past this run sheet')).toHaveCount(0);
+
       await page.goto(`/events/${eventId}/contingency`);
       const rain = page.getByRole('region', { name: 'Rain call: closing reception' });
       await rain.getByRole('link', { name: 'Preview Rain: move to Ballroom A' }).click();
       const preview = rain.getByRole('region', { name: 'Preview' });
       await expect(preview).toContainText(/Closing reception: 17:00–18:30 .*, Lakeview Terrace → 17:30–19:00 .*, Ballroom A/);
+      await expect(preview).toContainText(/Load-out: Brightline AV: 19:00–22:00 .* → 19:30–22:30/);
       await expect(preview).toContainText('Call sheets re-issued: Catering, Doors & Registration.');
       await preview.getByRole('button', { name: 'Execute Rain: move to Ballroom A' }).click();
 

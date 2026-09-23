@@ -47,6 +47,8 @@ model Event {
   registrations   Registration[]
   rfps            Rfp[]
   plans           ContingencyPlan[]
+  venue           Venue?                @relation(fields: [venueId], references: [id])
+  venueId         String?
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int                   @default(0)
 }
@@ -57,6 +59,11 @@ model Room {
   name          String
   strikeMinutes Int                   @default(0)
   resetMinutes  Int                   @default(0)
+  /// What the space can take (D-024). Null ceiling is open air.
+  ceilingFt     Int?
+  rigPoints     Int                   @default(0)
+  rigPointLbs   Int                   @default(0)
+  powerAmps     Int                   @default(0)
   event         Event                 @relation(fields: [eventId], references: [id])
   eventId       String
   sessions      Session[]
@@ -195,6 +202,7 @@ model Cue {
   roomId         String
   roles          CueRole[]
   plan           ContingencyPlan?
+  load           LoadSlot?
 
   @@index([eventId])
 }
@@ -510,6 +518,7 @@ model Vendor {
   quotes  Quote[]
   notices ContingencyNotice[]
   costs   ContingencyBranch[]
+  loads   LoadSlot[]
 }
 
 enum ComplianceKind {
@@ -563,15 +572,15 @@ enum BudgetCategory {
 /// Committed is what is contracted; actual is what has been invoiced. Lines
 /// are working state — the history is the snapshots.
 model BudgetLine {
-  id             String             @id @default(cuid())
+  id             String               @id @default(cuid())
   category       BudgetCategory
   description    String
   committedCents Int
-  actualCents    Int                @default(0)
-  clientBillable Boolean            @default(true)
-  event          Event              @relation(fields: [eventId], references: [id])
+  actualCents    Int                  @default(0)
+  clientBillable Boolean              @default(true)
+  event          Event                @relation(fields: [eventId], references: [id])
   eventId        String
-  vendor         Vendor?            @relation(fields: [vendorId], references: [id])
+  vendor         Vendor?              @relation(fields: [vendorId], references: [id])
   vendorId       String?
   attrition      AttritionDecision?
   contract       Contract?
@@ -905,4 +914,47 @@ model ContingencyEscalation {
   sentAt DateTime
 
   @@unique([planId, day, minute])
+}
+
+/// A venue's house facts as structured data (P0-8, D-024). Building-wide:
+/// the dock and its hours, wifi, union house rules. What each space can take
+/// (ceiling, rigging, power) is on Room.
+model Venue {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  dockBays     Int
+  /// House dock hours: every load slot runs inside them.
+  dockOpenMin  Int
+  dockCloseMin Int
+  maxTruckFt   Int
+  wifiMbps     Int
+  /// A union house bills a load call shorter than the minimum as the minimum.
+  unionHouse   Boolean @default(false)
+  minCallMin   Int     @default(0)
+  events       Event[]
+}
+
+enum LoadKind {
+  load_in
+  load_out
+}
+
+/// A load-in or load-out slot, planned against the venue (D-024). Its time is
+/// its cue's, so an anchored load-out moves with what it follows, and the
+/// cascade refuses any change that breaks the venue's rules.
+model LoadSlot {
+  id          String   @id @default(cuid())
+  kind        LoadKind
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId    String
+  /// Dock bays held for the whole slot.
+  trucks      Int
+  truckFt     Int
+  rigPoints   Int      @default(0)
+  rigPointLbs Int      @default(0)
+  powerAmps   Int      @default(0)
+  /// Trim height the rig needs.
+  ceilingFt   Int      @default(0)
+  cue         Cue      @relation(fields: [cueId], references: [id])
+  cueId       String   @unique
 }

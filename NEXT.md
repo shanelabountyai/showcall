@@ -1,12 +1,14 @@
 # Next
 
-**S-18 — Venue profiles (P0-8 rest).** See `docs/backlog.md` Phase 4. Dock, power, rigging, ceiling, wifi and union
-house rules as structured data; load-in and load-out slots planned against them as production cues. Model pick: Sonnet
-for the profile data and CRUD, Opus if slot planning ends up refusing cues (that is cascade-correctness work).
+**S-19 — Phase 4 gate, the capstone.** See `docs/backlog.md` Phase 4. e2e on a production build, running the PRD's
+five-minute story: v7 after lock, the keynote moves 15 minutes, and the rain call executes at its decide-by cue. Model pick:
+Opus. This is a gate, and it crosses every cascade path.
 
-What S-18 inherits from S-17:
-- `commitCascade(…, also)` runs extra writes in the cascade's transaction, after the preview check. Use it for anything that must land with a cue edit.
-- `CueEdit` takes `roomId`, and every `Moved` span carries its room name. A load-in cue moved between rooms shows in the preview.
-- The e2e sweep executes the seeded rain call, so S-19's capstone must either run before that spec or re-seed.
+What S-19 inherits from S-18:
+- Venue rules are cascade problems (D-024). A rebase or branch that breaks dock hours, bays or a room's rigging/power/trim is refused like a compression.
+- The live page's stale warning has **Rebase and re-issue call sheets**. The e2e rain spec clicks it first, because the keynote story leaves the sheet on v1.
+- The seeded AV load-out is anchored to the reception, so the rain call moves it 19:00–22:00 → 19:30–22:30, and the preview shows it.
+- The full sweep, not a subset, is the gate. CI runs no e2e. S-17's rain spec was green only when run alone.
+- The e2e sweep still executes the seeded rain call, so the capstone must run before that spec or re-seed.
 
-State: S-17 shipped (D-023). 176 vitest tests pass; both contingency e2e specs pass against a production build.
+State: S-18 shipped (D-024). 187 vitest tests pass; the full e2e sweep passes 25/25 against a production build.

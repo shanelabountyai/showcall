@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { PublicSession } from '../agenda/publish';
 import { prisma, type Tx } from '../db';
 import { fromDbDate, toDbDate } from '../time';
+import { venueProblems } from '../venue/rules';
 import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem } from './cues';
 
 /**
@@ -38,16 +39,21 @@ async function sessionsAt(tx: Tx, eventId: string, number: number) {
   return v.snapshot as PublicSession[];
 }
 
-const cuesOf = (tx: Tx, eventId: string) => tx.cue.findMany({ where: { eventId }, orderBy: { id: 'asc' }, include: { room: { select: { name: true } } } });
+const cuesOf = (tx: Tx, eventId: string) => tx.cue.findMany({ where: { eventId }, orderBy: { id: 'asc' }, include: { room: true, load: true } });
 type CueRow = Awaited<ReturnType<typeof cuesOf>>[number];
-const toSpec = ({ eventId: _, roomId: __, room: ___, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
+const toSpec = ({ eventId: _, roomId: __, room: ___, load: ____, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
 
-/** Timings carry their room, so a move that changes only the room — a rain call — is still a move the preview shows. */
+/**
+ * Timings carry their room, so a move that changes only the room — a rain call — is still a move the preview shows.
+ * Load slots are checked against the venue here, so every path that must leave no problem refuses a venue breach too (D-024).
+ */
 async function resolveAt(tx: Tx, eventId: string, version: number) {
   const [sessions, cues] = [await sessionsAt(tx, eventId, version), await cuesOf(tx, eventId)];
+  const { venue } = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { venue: true } });
   const resolved = resolveCues(sessions, cues.map(toSpec));
   const room = new Map([...sessions.map((s) => [s.id, s.room] as const), ...cues.map((c) => [c.id, c.room.name] as const)]);
   for (const [id, t] of resolved.timings) t.room = room.get(id);
+  resolved.problems.push(...venueProblems(venue, cues.flatMap((c) => (c.load ? [{ ...c.load, label: c.label, room: c.room }] : [])), resolved.timings));
   return resolved;
 }
 
@@ -110,14 +116,24 @@ export const commitCascade = (eventId: string, change: Change, expected: Moved[]
 export const addCue = (eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) =>
   prisma.$transaction((tx) => insertCue(tx, eventId, roomId, spec));
 
-/** `addCue` inside a caller's transaction, so a cue and the row that owns it land together. */
-export async function insertCue(tx: Tx, eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) {
-  const pinned = await lockEvent(tx, eventId);
+/**
+ * `addCue` inside a caller's transaction, so a cue and the row that owns it land together.
+ * `attach` writes that row before the check, so a load slot is checked as the cue it will be.
+ */
+export async function insertCue(tx: Tx, eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>, attach?: (cueId: string) => Promise<unknown>) {
+  await lockEvent(tx, eventId);
   await tx.room.findFirstOrThrow({ where: { id: roomId, eventId } });
   const cue = await tx.cue.create({ data: { eventId, roomId, ...spec, day: dbDay(spec.day) } });
+  await attach?.(cue.id);
+  await recheck(tx, eventId);
+  return cue;
+}
+
+/** After a write outside the cascade (a cue insert, a venue or room edit): refused whole if the sheet is left with any problem. */
+export async function recheck(tx: Tx, eventId: string) {
+  const pinned = await lockEvent(tx, eventId);
   const { problems } = await resolveAt(tx, eventId, pinned);
   if (problems.length) throw new CascadeBlocked(problems);
-  return cue;
 }
 
 export type RunSheetRow = { id: string; kind: 'session' | 'cue'; label: string; room: string; day: string; startMin: number; endMin: number; slack?: number };

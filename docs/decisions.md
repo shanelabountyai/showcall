@@ -581,3 +581,52 @@ so the plan shows both, marked taken or not taken.
 **The execute form carries the preview.** The `expected` cascade goes in a
 hidden field. If the sheet changed since the preview, the commit refuses
 (`CascadeChanged`) and nothing is written: no decision and no budget line.
+
+## D-024 · 2026-09-23 · Venue profiles: house facts the cascade checks
+
+No picks were needed from Shane for S-18. Each choice follows from D-006 (the
+cascade is the only writer of the run sheet) and D-023.
+
+**The profile is split by what it describes.** `Venue` holds building-wide
+facts: dock bays, dock hours, the longest truck the dock takes, wifi, and the
+union house's minimum call. What a space can take (ceiling, rigging points and
+their rated load, house power) is on `Room`, because a rain call moves a cue
+between rooms and the check has to follow it. A null ceiling means open air.
+
+**A load slot is a cue plus its needs.** `LoadSlot` hangs off a cue, the same
+way a contingency plan hangs off its decide-by. Its time is never stored. The
+seeded AV load-out is anchored to the reception, so the rain call pushes it 30
+minutes, and the preview shows that.
+
+**Venue rules are cascade problems, not a separate check.** `resolveAt` adds
+`venueProblems` (`src/venue/rules.ts`) to the cue graph's problems. So a
+change that pushes a load-out past dock close, overfills the dock, or moves a
+rig into a room that cannot hang it is refused by the same invariant as a
+compression. This covers edits, rebases, contingency branches and inserts.
+`insertCue` takes an `attach` hook, so the slot row exists before the check
+runs.
+
+**Profile edits re-check what is planned.** `saveVenue` and `setRoomSpec`
+re-run the check on every event they touch, inside the edit's transaction.
+An edit that would break a planned slot is refused, and the refusal names the
+slot. A profile can never silently disagree with the load plan.
+
+**The minimum call bills, it does not refuse.** A one-hour florals load-in at
+a union house is legal; it is billed as four hours. The load plan shows the
+billed length. Overtime and meal penalties are S-22 (P1-1).
+
+Not done: two events sharing one venue's dock on the same day are each checked
+alone (a `ponytail:` comment marks it). Anchored slots are planned from the
+seed and `planLoad` only; the page plans fixed-time slots. Room specs are
+edited through `setRoomSpec`, not the page.
+
+**Rebase from the page (Shane's pick, S-18).** The full e2e sweep showed that
+the S-17 rain spec only passed when run alone. Earlier in the sequence the
+keynote story publishes v2, and nothing in the app could rebase the run sheet,
+so the rain call's re-issue was refused as stale. Shane chose a rebase control
+over weakening the spec. The live page's stale warning now carries **Rebase and
+re-issue call sheets**. It previews and commits the rebase through the cascade
+in one action, refused whole on any problem (venue problems included). Then it
+re-issues the sheets the rebase changed, so the next change re-issues only its
+own sheets. CI runs no e2e, so the full sweep on a production build is the
+gate at each item, not a subset of specs.

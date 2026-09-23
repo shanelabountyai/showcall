@@ -640,3 +640,29 @@ call. A decision is append-only, so reversing one is a new cue edit.
 **Verdict.** Validated. Producer review asked for decision trees that
 execute, and the rain call now executes at its decide-by cue with the same
 guarantee as any other run-sheet change.
+
+## Venue profiles and load slots (P0-8, S-18)
+
+A venue profile is structured data: dock bays and hours, the longest truck the
+dock takes, wifi, and union house rules. Each room records its ceiling,
+rigging points, their rated load and its house power. Load-ins and load-outs
+are run-sheet cues with needs attached: trucks, truck length, rigging, power
+and trim height. The cascade checks them against the venue alongside the cue
+graph. A keynote push that shoves the load-out past dock close is refused like
+a compression. So is a third truck at a two-bay dock, or a rain call that
+moves a rig into a salon with a 12 ft ceiling. Editing the profile re-checks
+what is planned, so closing the dock early is refused while it would strand a
+slot, and the refusal names the slot (D-024).
+
+**Defects found.** None in the shipped code. Three test expectations had the
+arithmetic wrong (a window that fit when the test said it would not). The
+checks were right and the tests were fixed.
+
+**What it deliberately does not do.** Two events sharing one dock on the same
+day, anchored slots from the page, or editing room specs from the page. The
+union minimum call is billed, not refused. Overtime and meal penalties are
+S-22.
+
+**Verdict.** Validated. Producer review #5 asked for venue facts as data
+rather than notes. Once they are data, the cascade can refuse a load plan the
+building cannot take, and that is the useful part.

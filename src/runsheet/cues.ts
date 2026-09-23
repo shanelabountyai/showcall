@@ -25,7 +25,8 @@ export type CueSpec = {
 /** `room` is set by the cascade, which knows rooms; the pure graph never needs it. */
 export type Span = { day: LocalDate; startMin: number; endMin: number; room?: string };
 export type Timing = Span & { slack?: number };
-export type ProblemKind = 'cycle' | 'anchor_missing' | 'outside_day' | 'compressed';
+/** The venue kinds come from src/venue/venue.ts, checked by the cascade alongside these. */
+export type ProblemKind = 'cycle' | 'anchor_missing' | 'outside_day' | 'compressed' | 'dock_hours' | 'dock_bays' | 'venue_spec';
 export type Problem = { kind: ProblemKind; cueId: string; message: string };
 export type Moved = { id: string; from: Span | null; to: Span | null };
 

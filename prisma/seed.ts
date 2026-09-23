@@ -26,6 +26,7 @@ import { createEvent } from '../src/events';
 import { addCue, commitCascade, loadRunSheet, previewCascade } from '../src/runsheet/cascade';
 import type { CueSpec } from '../src/runsheet/cues';
 import { assign } from '../src/staffing/staffing';
+import { planLoad, saveVenue, setEventVenue } from '../src/venue/venue';
 import { resetDb } from '../src/test/harness';
 import { addDays, daysBetween, fromDbDate, localNow, toDbDate } from '../src/time';
 
@@ -40,8 +41,13 @@ const [d1, d2] = daysBetween(today.day, fromDbDate(new Date(toDbDate(today.day).
 
 const event = await createEvent({ name: 'Northwind Leadership Summit', clientName: 'Northwind Health Partners', timezone: TZ, startDate: d1, endDate: d2 });
 const room = {} as Record<'Ballroom A' | 'Salon B' | 'Salon C' | 'Lakeview Terrace', { id: string }>;
-for (const [name, strikeMinutes, resetMinutes] of [['Ballroom A', 5, 10], ['Salon B', 5, 5], ['Salon C', 5, 5], ['Lakeview Terrace', 5, 5]] as const) {
-  room[name] = await prisma.room.create({ data: { eventId: event.id, name, strikeMinutes, resetMinutes } });
+// Venue profile (D-024): the house facts every load slot is planned against. Open air has no ceiling.
+const venue = await saveVenue({ name: 'Lakeshore Grand Conference Center', dockBays: 2, dockOpenMin: at(6), dockCloseMin: at(23), maxTruckFt: 48, wifiMbps: 500, unionHouse: true, minCallMin: 240 });
+await setEventVenue(event.id, venue.id);
+for (const [name, strikeMinutes, resetMinutes, ceilingFt, rigPoints, rigPointLbs, powerAmps] of [
+  ['Ballroom A', 5, 10, 24, 12, 1000, 400], ['Salon B', 5, 5, 12, 0, 0, 100], ['Salon C', 5, 5, 12, 0, 0, 100], ['Lakeview Terrace', 5, 5, null, 0, 0, 60],
+] as const) {
+  room[name] = await prisma.room.create({ data: { eventId: event.id, name, strikeMinutes, resetMinutes, ceilingFt, rigPoints, rigPointLbs, powerAmps } });
 }
 
 const speakerNames = ['Dana Reyes', 'Marcus Oyelaran', 'Ingrid Solberg', 'Tomás Aguilar', 'Keiko Brandt', 'Ravi Menon', 'Hollis Grant', 'Nadia Farouk', 'Owen Castellano', 'Lucia Varga'];
@@ -258,6 +264,12 @@ for (const row of due) {
 // client-approved snapshot gives the view some drift to show.
 const vendor = {} as Record<'Lakeshore Catering' | 'Brightline AV' | 'Petal & Stem', { id: string }>;
 for (const name of ['Lakeshore Catering', 'Brightline AV', 'Petal & Stem'] as const) vendor[name] = await addVendor(name);
+// Load slots (D-024): the AV rig loads in the day before and out after the
+// reception, so the rain call pushes the load-out 30 minutes with it.
+const avRig = { vendorId: vendor['Brightline AV'].id, roomId: room['Ballroom A'].id, trucks: 2, truckFt: 48, rigPoints: 8, rigPointLbs: 750, powerAmps: 400, ceilingFt: 20 };
+await planLoad(event.id, { ...avRig, kind: 'load_in', durationMin: 360, when: { ...blank, day: addDays(d1, -1), startMin: at(8) } });
+await planLoad(event.id, { vendorId: vendor['Petal & Stem'].id, roomId: room['Ballroom A'].id, kind: 'load_in', trucks: 1, truckFt: 26, durationMin: 60, when: { ...blank, day: d1, startMin: at(6) } });
+await planLoad(event.id, { ...avRig, kind: 'load_out', durationMin: 180, when: { ...blank, anchorId: reception.id, anchorEdge: 'end', offsetMin: 30 } });
 await recordDoc(vendor['Lakeshore Catering'].id, 'coi', addDays(d1, -200), addDays(d1, 165));
 await recordDoc(vendor['Lakeshore Catering'].id, 'w9', addDays(d1, -200), null);
 await recordDoc(vendor['Brightline AV'].id, 'coi', addDays(d1, -365), d1);
