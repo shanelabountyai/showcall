@@ -33,18 +33,29 @@ describe('portal tokens', () => {
     const row = await prisma.speaker.findUniqueOrThrow({ where: { id: a.id } });
     expect(row.portalTokenHash).toBe(createHash('sha256').update(token).digest('hex'));
     expect(JSON.stringify(row)).not.toContain(token);
-    expect(await resolvePortal(token)).toMatchObject({ kind: 'speaker', id: a.id, deliverables: [{ label: 'Keynote deck' }] });
-    expect(await resolvePortal('not-a-token')).toBeNull();
-    expect(await resolvePortal('')).toBeNull();
+    expect(await resolvePortal(token, clock)).toMatchObject({ kind: 'speaker', id: a.id, deliverables: [{ label: 'Keynote deck' }] });
+    expect(await resolvePortal('not-a-token', clock)).toBeNull();
+    expect(await resolvePortal('', clock)).toBeNull();
   });
 
   it('reissue kills the old link', async () => {
     const { a, deckA } = await setup();
     const old = await issuePortalToken({ speakerId: a.id });
     const fresh = await issuePortalToken({ speakerId: a.id });
-    expect(await resolvePortal(old)).toBeNull();
+    expect(await resolvePortal(old, clock)).toBeNull();
     await expect(submitVersion(old, deckA.id, upload(await pdf(1920, 1080)), clock)).rejects.toThrow(ContentRefused);
     await expect(submitVersion(fresh, deckA.id, upload(await pdf(1920, 1080)), clock)).resolves.toMatchObject({ number: 1 });
+  });
+
+  it('dies a week after the event ends: the page is gone and writes are refused (SEC-05)', async () => {
+    const { a, deckA } = await setup(); // the event ends 2026-10-14, America/Chicago
+    const token = await issuePortalToken({ speakerId: a.id });
+    const lastNight = fixedClock('2026-10-22T04:59:00Z'); // 23:59 on the 21st in Chicago
+    const nextMorning = fixedClock('2026-10-22T05:00:00Z');
+    expect(await resolvePortal(token, lastNight)).not.toBeNull();
+    expect(await resolvePortal(token, nextMorning)).toBeNull();
+    await expect(submitVersion(token, deckA.id, upload(await pdf(1920, 1080)), nextMorning)).rejects.toThrow('This link is not valid');
+    await expect(submitVersion(token, deckA.id, upload(await pdf(1920, 1080)), lastNight)).resolves.toMatchObject({ number: 1 });
   });
 });
 

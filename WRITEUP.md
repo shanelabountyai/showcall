@@ -726,3 +726,39 @@ log cannot tell it from a real one.
 
 **Verdict.** Validated. The GO log (D-010) was designed append-only so this
 report would exist. It needed no new capture, only a read.
+
+## Vendor/crew portal (P1-3, S-21)
+
+Every call role ("A1 Audio", "Catering") can now be sent a link. The page
+shows the role's latest call sheet exactly as it was issued, what changed
+since the issue before it, and a button to confirm receipt. On the producer's
+new `/events/<id>/callsheets` page, each role reads *awaiting receipt* until
+that confirmation arrives. A re-issue raises the flag again, and confirming an
+older issue is refused, so a cleared flag always means the recipient has the
+current sheet. A role tied to a vendor also takes that vendor's certificate of
+insurance. The upload waits on the budget page until a producer opens it and
+enters the expiry printed on the paper. Only then does it count toward
+compliance (D-026). In the seed, Brightline AV's COI lapses on day 1 and its
+link sends the renewal.
+
+The two portal findings from the audit were fixed for both portals.
+Issuing a link returns the raw token as the form's state instead of putting
+it in a URL (SEC-04). A link now expires a week after its event ends, and
+`/portal/*` is sent as no-store, no-referrer and noindex (SEC-05).
+
+**Defects found.** None in the shipped code. The first e2e draft reused the
+spec-wide event id after the Phase 4 gate had reseeded the database, so the
+new page returned 404 for an event that no longer existed. The block now reads
+the id again after the reseed.
+
+**What it deliberately does not do.** Reject a submission (a bad upload stays
+pending), take a W-9, offer a PDF download on the portal, or rate-limit
+uploads per token (SEC-07). The link is still the only credential, so anyone
+it is forwarded to can confirm receipt. That is why confirming receipt is the
+most it can do, and why a COI still needs a producer's accept.
+
+**Verdict.** Validated. Receipt turned out to be a different flag from
+staleness. Stale means the sheet needs issuing, and only issuing clears it.
+Awaiting receipt means an issue has not been acknowledged, and a receipt
+clears it. The PRD's "receipt clears the re-issue flag" folded the two
+together.

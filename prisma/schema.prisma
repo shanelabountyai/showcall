@@ -210,14 +210,20 @@ model Cue {
 /// A call-sheet audience (D-008): "Florist", "A1 Audio". Cues are tagged to
 /// the roles they concern, and a role's sheet shows exactly those cues.
 model CallRole {
-  id       String           @id @default(cuid())
-  name     String
+  id              String           @id @default(cuid())
+  name            String
   /// Where to report: dock, entrance, contact. Printed on the sheet.
-  reportTo String           @default("")
-  event    Event            @relation(fields: [eventId], references: [id])
-  eventId  String
-  cues     CueRole[]
-  issues   CallSheetIssue[]
+  reportTo        String           @default("")
+  event           Event            @relation(fields: [eventId], references: [id])
+  eventId         String
+  cues            CueRole[]
+  issues          CallSheetIssue[]
+  /// SHA-256 of the crew-portal token (P1-3, D-026); the raw token is shown once. Reissue kills the old link.
+  portalTokenHash String?          @unique
+  /// The company behind this role, if any: its portal takes that vendor's COI.
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id])
+  vendorId        String?
+  coiSubmissions  CoiSubmission[]
 
   @@unique([eventId, name])
 }
@@ -234,17 +240,27 @@ model CueRole {
 /// An issued call sheet. Append-only (trigger), like AgendaVersion: what a
 /// role was sent is kept exactly, and the next issue diffs against it.
 model CallSheetIssue {
-  id            String   @id @default(cuid())
+  id            String            @id @default(cuid())
   number        Int
   /// The agenda version the run sheet was pinned to; stale when behind (D-003).
   agendaVersion Int
   /// The role's projection only — see src/callsheet/callsheet.ts.
   content       Json
   issuedAt      DateTime
-  role          CallRole @relation(fields: [roleId], references: [id])
+  role          CallRole          @relation(fields: [roleId], references: [id])
   roleId        String
+  receipt       CallSheetReceipt?
 
   @@unique([roleId, number])
+}
+
+/// The recipient confirmed they have this issue (P1-3). Append-only (trigger),
+/// one per issue. The latest issue without one is still awaiting receipt.
+model CallSheetReceipt {
+  id          String         @id @default(cuid())
+  issue       CallSheetIssue @relation(fields: [issueId], references: [id])
+  issueId     String         @unique
+  confirmedAt DateTime
 }
 
 /// Stage-manager live mode: a GO on a run-sheet row, stamped from the clock.
@@ -509,16 +525,18 @@ model Reminder {
 /// A company Showcall buys from. House-wide, like Staff: one caterer across
 /// every event, one COI on file for all of them.
 model Vendor {
-  id      String               @id @default(cuid())
-  name    String               @unique
-  docs    ComplianceDoc[]
-  lines   BudgetLine[]
-  nags    ComplianceReminder[]
-  blocks  RoomBlock[]
-  quotes  Quote[]
-  notices ContingencyNotice[]
-  costs   ContingencyBranch[]
-  loads   LoadSlot[]
+  id             String               @id @default(cuid())
+  name           String               @unique
+  docs           ComplianceDoc[]
+  lines          BudgetLine[]
+  nags           ComplianceReminder[]
+  blocks         RoomBlock[]
+  quotes         Quote[]
+  notices        ContingencyNotice[]
+  costs          ContingencyBranch[]
+  loads          LoadSlot[]
+  roles          CallRole[]
+  coiSubmissions CoiSubmission[]
 }
 
 enum ComplianceKind {
@@ -536,6 +554,28 @@ model ComplianceDoc {
   expiresOn  DateTime?      @db.Date
   vendor     Vendor         @relation(fields: [vendorId], references: [id])
   vendorId   String
+  submission CoiSubmission?
+}
+
+/// A COI uploaded through the crew portal (D-026). Pending until a producer
+/// accepts it, which records the ComplianceDoc — an unauthenticated upload
+/// never clears compliance on its own. Append-only except the one accept.
+model CoiSubmission {
+  id              String         @id @default(cuid())
+  vendor          Vendor         @relation(fields: [vendorId], references: [id])
+  vendorId        String
+  /// The portal it came through.
+  role            CallRole       @relation(fields: [roleId], references: [id])
+  roleId          String
+  filename        String
+  mimeType        String
+  bytes           Bytes
+  byteSize        Int
+  /// What the vendor says; the producer confirms it on accept.
+  statedExpiresOn DateTime       @db.Date
+  submittedAt     DateTime
+  doc             ComplianceDoc? @relation(fields: [docId], references: [id])
+  docId           String?        @unique
 }
 
 /// The compliance nag outbox (D-019) — Reminder's sibling, not a

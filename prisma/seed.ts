@@ -20,6 +20,7 @@ import { createPlan, escalateDue } from '../src/contingency/contingency';
 import { DAY, fixedClock, systemClock } from '../src/clock';
 import { buildPackage } from '../src/content/distribution';
 import { approve } from '../src/content/lock';
+import { issueCrewLink } from '../src/callsheet/portal';
 import { addDeliverable, addRule, addSponsor, issuePortalToken, submitVersion } from '../src/content/pipeline';
 import { prisma } from '../src/db';
 import { createEvent } from '../src/events';
@@ -275,6 +276,10 @@ await recordDoc(vendor['Lakeshore Catering'].id, 'w9', addDays(d1, -200), null);
 await recordDoc(vendor['Brightline AV'].id, 'coi', addDays(d1, -365), d1);
 await recordDoc(vendor['Brightline AV'].id, 'w9', addDays(d1, -365), null);
 await recordDoc(vendor['Petal & Stem'].id, 'coi', addDays(d1, -30), addDays(d1, 335));
+// The crew portal (D-026): these roles' links take their vendor's COI, so Brightline can send its renewal.
+await prisma.callRole.update({ where: { id: roles['A1 Audio'].id }, data: { vendorId: vendor['Brightline AV'].id } });
+await prisma.callRole.update({ where: { id: roles['Catering'].id }, data: { vendorId: vendor['Lakeshore Catering'].id } });
+portalLinks.push(`A1 Audio crew (Brightline AV): /portal/call/${await issueCrewLink(event.id, roles['A1 Audio'].id)}`);
 const line = async (category: Parameters<typeof addLine>[1]['category'], description: string, dollars: number, v?: keyof typeof vendor, clientBillable = true) =>
   addLine(event.id, { category, description, committedCents: dollars * 100, vendorId: v && vendor[v].id, clientBillable });
 await line('venue', 'Ballroom and salons, two days', 48_000);

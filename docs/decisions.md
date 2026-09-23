@@ -671,3 +671,43 @@ the producer saw and is refused if that total has moved.
 Not done: reopening a closed budget (there is no path to reopen by design;
 correcting a mistake would be a new event-level decision), per-crew overtime
 in the reconciliation (S-22), and client sign-off on the close (S-23).
+
+## D-026 · 2026-09-23 · Crew portal: a link per call role, receipt per issue, COI waits for a producer
+
+Shane's picks, all three as recommended.
+
+**The link belongs to a `CallRole`** ("Florist", "A1 Audio"), not to a
+house-wide `Vendor`. A role can carry an optional vendor. If it does, its
+portal also takes that vendor's COI. Crew roles see only their sheet and the
+receipt button. The page shows the role's **latest stored issue**, not the
+live projection, so the recipient sees exactly what was sent, and the changes
+listed are measured against the issue before it.
+
+**Receipt is per issue** (`CallSheetReceipt`, append-only, one per issue).
+`callSheetStatus` gains `awaitingReceipt`: the latest issue has no receipt.
+This is the "re-issue flag" that the PRD says a receipt clears. Staleness
+(D-009) is a separate thing and is still cleared only by issuing. A re-issue
+raises the flag again. Confirming an older issue is refused, because it is not
+the sheet the recipient should be working from. A second confirmation is a
+no-op (`ON CONFLICT DO NOTHING`), so a double-click cannot write twice.
+
+**A portal COI is a pending `CoiSubmission`** until a producer opens the file
+and accepts it on the budget page, entering the expiry printed on the paper.
+The accept records the `ComplianceDoc`, dated the day of the upload, in the
+same transaction. A link is not an identity: anyone who holds it could upload,
+so an upload alone never clears the compliance gate. A trigger keeps the
+submission append-only, except that `docId` can be set once, from null.
+
+**SEC-04 and SEC-05 fixed with it, for both portals.** Issuing a link returns
+the raw token as server-action state (`app/issue-link.tsx`), so it is never
+put in a URL. A link dies **seven days after its event's last day**, in the
+event's timezone. That is derived from the event at check time, not stored in
+a `portalTokenExpiresAt` column as the audit suggested: a stored date would
+drift when the event moves, and the one rule covers every portal. An expired
+link returns the same 404 as a bad one, and writes through it are refused.
+`/portal/*` sends `Cache-Control: no-store`, `Referrer-Policy: no-referrer`
+and `X-Robots-Tag: noindex, nofollow`.
+
+Not done: rejecting a submission (a bad upload stays pending until a better
+one is accepted), W-9 upload, a PDF download on the portal, and per-token rate
+limits (SEC-07).

@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export default async function Portal({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await params;
   const { error } = await searchParams;
-  const owner = await resolvePortal(token);
+  const owner = await resolvePortal(token, systemClock);
   if (!owner) notFound();
   const here = `/portal/${token}`;
 

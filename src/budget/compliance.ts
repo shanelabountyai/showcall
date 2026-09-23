@@ -25,11 +25,11 @@ export async function addVendor(name: string) {
 }
 
 /** A document received. A renewal is another call — the latest received is the one in force. */
-export async function recordDoc(vendorId: string, kind: ComplianceKind, receivedOn: LocalDate, expiresOn: LocalDate | null) {
+export async function recordDoc(vendorId: string, kind: ComplianceKind, receivedOn: LocalDate, expiresOn: LocalDate | null, db: Tx = prisma) {
   if (kind === 'coi' && !expiresOn) throw new ComplianceRefused('A certificate of insurance needs its expiry date');
   if (kind === 'w9' && expiresOn) throw new ComplianceRefused('A W-9 does not expire');
   if (expiresOn && expiresOn <= receivedOn) throw new ComplianceRefused('That certificate expired before it was received');
-  return prisma.complianceDoc.create({ data: { vendorId, kind, receivedOn: toDbDate(receivedOn), expiresOn: expiresOn && toDbDate(expiresOn) } });
+  return db.complianceDoc.create({ data: { vendorId, kind, receivedOn: toDbDate(receivedOn), expiresOn: expiresOn && toDbDate(expiresOn) } });
 }
 
 /** One kind of paper against an event ending `end`. `docs` newest first: the latest received is the one in force. */

@@ -143,6 +143,8 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
 
       const keiko = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Keiko Brandt/ }) });
       await keiko.getByRole('button', { name: 'Issue portal link' }).click();
+      await expect(page.getByRole('status')).toContainText('copy it now');
+      expect(page.url()).not.toContain('link='); // SEC-04: the token is never in a URL
       await page.getByRole('status').getByRole('link', { name: 'open' }).click();
       await expect(page.getByRole('heading', { name: /content for Keiko Brandt/ })).toBeVisible();
 
@@ -520,6 +522,60 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(log).toContainText('Budget: $3,800.00 committed');
       await expect(log).toContainText(/Call sheets re-issued: Catering \(issue \d+\), Doors & Registration \(issue \d+\)\./);
       await expect(rain.getByRole('row').filter({ hasText: 'Dry: hold on the terrace' })).toContainText('not taken');
+    });
+  });
+
+  test.describe('crew portal (S-21)', () => {
+    // After the Phase 4 gate's reseed: the event id changed, and A1 Audio's sheet was just re-issued.
+    let eventId = '';
+    test.beforeAll(async ({ request }) => {
+      eventId = (await (await request.get('/')).text()).match(/href="\/events\/([^/"]+)\/grid"/)![1]!;
+    });
+
+    test('A1 Audio confirms its re-issued sheet; Brightline sends a COI that counts only once a producer accepts it', async ({ page }) => {
+      await page.goto(`/events/${eventId}/callsheets`);
+      const audio = page.getByRole('region', { name: 'A1 Audio', exact: true });
+      await expect(audio).toContainText('awaiting receipt'); // the Phase 4 gate re-issued it
+      await audio.getByRole('button', { name: /portal link/ }).click();
+      const url = await audio.getByRole('status').getByRole('link', { name: 'open' }).getAttribute('href');
+      expect(page.url()).not.toContain('/portal/'); // SEC-04
+
+      const res = await page.goto(url!);
+      expect(res!.headers()['cache-control']).toContain('no-store'); // SEC-05
+      expect(res!.headers()['referrer-policy']).toBe('no-referrer');
+      expect(res!.headers()['x-robots-tag']).toContain('noindex');
+      await expect(page.getByRole('heading', { name: /A1 Audio call sheet/ })).toBeVisible();
+      await expect(page.getByText('Walk-in music').first()).toBeVisible();
+      await expect(page.getByText('Lunch service')).toHaveCount(0); // Catering's cue (hard rule 7)
+      await page.getByRole('button', { name: /^Confirm I have issue \d+$/ }).click();
+      await expect(page.getByRole('status')).toContainText('You confirmed receipt');
+
+      const coi = page.getByRole('region', { name: 'Certificate of insurance' });
+      await coi.getByLabel('Certificate file').setInputFiles({ name: 'brightline-coi.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 renewal') });
+      await coi.getByLabel('Expires').fill('2027-09-30');
+      await coi.getByRole('button', { name: 'Upload certificate' }).click();
+      await expect(coi).toContainText('brightline-coi.pdf');
+      await expect(coi).toContainText('waiting for review');
+
+      await page.goto(`/events/${eventId}/budget`);
+      const worklist = page.getByRole('region', { name: 'Compliance worklist' });
+      const brightlineCoi = worklist.getByRole('row').filter({ hasText: 'Brightline AV' }).filter({ hasText: 'certificate of insurance' });
+      await expect(brightlineCoi).toContainText('lapses before the show'); // pending is not compliant
+      const uploaded = page.getByRole('list', { name: 'Uploaded certificates' }).getByRole('listitem').filter({ hasText: 'Brightline AV' });
+      await uploaded.getByRole('button', { name: 'Accept certificate' }).click();
+      await expect(brightlineCoi).toContainText('in force to');
+      await expect(page.getByRole('list', { name: 'Uploaded certificates' })).toHaveCount(0);
+
+      await page.goto(url!);
+      await expect(page.getByRole('region', { name: 'Certificate of insurance' })).toContainText('accepted');
+      await page.goto(`/events/${eventId}/callsheets`);
+      await expect(audio).toContainText('receipt confirmed');
+    });
+
+    test('a bad crew link is a plain 404, with the portal headers', async ({ page }) => {
+      const res = await page.goto('/portal/call/not-a-real-token');
+      expect(res?.status()).toBe(404);
+      expect(res!.headers()['referrer-policy']).toBe('no-referrer');
     });
   });
 });

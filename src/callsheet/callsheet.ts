@@ -52,7 +52,7 @@ async function drafts(eventId: string) {
     loadRunSheet(eventId),
     prisma.callRole.findMany({
       where: { eventId }, orderBy: { name: 'asc' },
-      include: { cues: { select: { cueId: true } }, issues: { orderBy: { number: 'desc' }, take: 1 } },
+      include: { cues: { select: { cueId: true } }, issues: { orderBy: { number: 'desc' }, take: 1, include: { receipt: true } } },
     }),
   ]);
   return {
@@ -78,6 +78,8 @@ export async function callSheetStatus(eventId: string) {
   return roles.map(({ role, last, prev, content, changed }) => ({
     roleId: role.id, role: role.name, lastIssue: last?.number ?? 0,
     stale: !!last && (sheet.stale || changed),
+    /** Issued, and the recipient has not confirmed it through the portal (P1-3). */
+    awaitingReceipt: !!last && !last.receipt,
     changes: changed ? diffCallSheets(prev, content) : null,
   }));
 }

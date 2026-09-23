@@ -1,13 +1,15 @@
 # Next
 
-**S-21 — P1-3 vendor/crew portal.** A tokenized page showing the vendor's call sheet, COI upload, and a receipt
-confirmation that clears P0-2's re-issue flag. See `docs/backlog.md` P1. Model pick: Opus, because the page is a
-public token-gated surface. Reuse the S-8 portal token pattern and S-12 compliance. SEC-04/05 (the token in the
-query string, no expiry) apply to it directly, so decide whether to fix them with it.
+**S-22 — P1-1 crew work rules as data.** Warn about breaks, meal penalties and overtime while the run sheet is
+being edited. See `docs/backlog.md` P1. Model pick: Opus, because meal penalties are money and the warnings
+cascade. Model the rules as data, as validation rules already are (S-8), and read shift minutes from S-5's
+Assignment/Staff capacity.
 
-State: S-20 shipped. `/events/<id>/reconcile` has planned vs. actual from the GO log, final attrition, and the
-budget close. The close is a final snapshot, and a trigger freezes the lines after it (D-025). 197 vitest pass;
-the e2e sweep is 27/27 on a production build.
+State: S-21 shipped (D-026). There is a crew/vendor portal at `/portal/call/<token>` and a producer page at
+`/events/<id>/callsheets`. A receipt clears `awaitingReceipt`, and a portal COI is pending until it is
+accepted on the budget page. SEC-04 and SEC-05 are fixed for both portals: the token is shown once as
+form state, and a link expires 7 days after its event ends and is served with no-store, no-referrer and
+noindex headers. 206 vitest pass. The e2e sweep is 29/29 on a production build.
 
-Shane chose to build the P1s before project closure (D-025). Still owed at closure: the exec brief and the
-LinkedIn posts. DEMO.md already exists.
+Shane chose to build the P1s before closing the project (D-025). Still owed at closure: the exec brief and
+the LinkedIn posts. DEMO.md exists; add the crew portal stop to it at closure.

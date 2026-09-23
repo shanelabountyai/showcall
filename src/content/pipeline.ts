@@ -1,6 +1,7 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Clock } from '../clock';
 import { prisma } from '../db';
+import { hashToken, linkLive, newToken } from '../portal';
 import type { DeliverableKind, RuleCheck } from '../generated/prisma/enums';
 import { extractFacts } from './facts';
 import { evaluate } from './rules';
@@ -19,19 +20,17 @@ export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export type Owner = { speakerId: string } | { sponsorId: string };
 
-const hash = (token: string) => createHash('sha256').update(token).digest('hex');
-
 /** A fresh link for the owner; the raw token is returned once and never stored. Reissue kills the old one. */
 export async function issuePortalToken(owner: Owner) {
-  const token = randomBytes(32).toString('base64url');
-  const data = { portalTokenHash: hash(token) };
+  const { token, hash } = newToken();
+  const data = { portalTokenHash: hash };
   if ('speakerId' in owner) await prisma.speaker.update({ where: { id: owner.speakerId }, data });
   else await prisma.sponsor.update({ where: { id: owner.sponsorId }, data });
   return token;
 }
 
 const portalInclude = {
-  event: { select: { name: true } },
+  event: { select: { name: true, endDate: true, timezone: true } },
   deliverables: {
     orderBy: { label: 'asc' },
     include: {
@@ -47,22 +46,24 @@ const portalInclude = {
   },
 } as const;
 
-/** The token's owner and what they owe, or null. Never says whether a token once existed. */
-export async function resolvePortal(token: string) {
+/** The token's owner and what they owe, or null. Never says whether a token once existed or has expired. */
+export async function resolvePortal(token: string, clock: Clock) {
   if (!token) return null;
-  const portalTokenHash = hash(token);
+  const portalTokenHash = hashToken(token);
   const speaker = await prisma.speaker.findUnique({ where: { portalTokenHash }, include: portalInclude });
-  if (speaker) return { kind: 'speaker' as const, ...speaker };
+  if (speaker) return linkLive(speaker.event, clock) ? { kind: 'speaker' as const, ...speaker } : null;
   const sponsor = await prisma.sponsor.findUnique({ where: { portalTokenHash }, include: portalInclude });
-  return sponsor && { kind: 'sponsor' as const, ...sponsor };
+  return sponsor && linkLive(sponsor.event, clock) ? { kind: 'sponsor' as const, ...sponsor } : null;
 }
 
-async function ownerOf(token: string) {
-  const portalTokenHash = token ? hash(token) : '';
-  const speaker = token ? await prisma.speaker.findUnique({ where: { portalTokenHash }, select: { id: true } }) : null;
-  if (speaker) return { speakerId: speaker.id, sponsorId: null };
-  const sponsor = token ? await prisma.sponsor.findUnique({ where: { portalTokenHash }, select: { id: true } }) : null;
-  if (sponsor) return { speakerId: null, sponsorId: sponsor.id };
+const liveSelect = { id: true, event: { select: { endDate: true, timezone: true } } } as const;
+
+async function ownerOf(token: string, clock: Clock) {
+  const portalTokenHash = token ? hashToken(token) : '';
+  const speaker = token ? await prisma.speaker.findUnique({ where: { portalTokenHash }, select: liveSelect }) : null;
+  if (speaker && linkLive(speaker.event, clock)) return { speakerId: speaker.id, sponsorId: null };
+  const sponsor = token && !speaker ? await prisma.sponsor.findUnique({ where: { portalTokenHash }, select: liveSelect }) : null;
+  if (sponsor && linkLive(sponsor.event, clock)) return { speakerId: null, sponsorId: sponsor.id };
   throw new ContentRefused('This link is not valid');
 }
 
@@ -70,7 +71,7 @@ export type Upload = { filename: string; mimeType: string; bytes: Uint8Array };
 
 /** The portal's upload. Refused unless the deliverable is the token owner's; nothing is written on refusal. */
 export async function submitVersion(token: string, deliverableId: string, file: Upload, clock: Clock) {
-  const owner = await ownerOf(token);
+  const owner = await ownerOf(token, clock);
   if (file.bytes.length === 0) throw new ContentRefused('The file is empty');
   if (file.bytes.length > MAX_UPLOAD_BYTES) throw new ContentRefused(`The file is over the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB upload limit`);
   const facts = await extractFacts(file.bytes, file.filename);
@@ -108,7 +109,7 @@ export const producerComment = (versionId: string, body: string, requestsChanges
 
 /** The portal's reply: always the submitter side, and only on the token owner's own versions. */
 export async function submitterComment(token: string, versionId: string, body: string, clock: Clock) {
-  const owner = await ownerOf(token);
+  const owner = await ownerOf(token, clock);
   const v = await prisma.contentVersion.findUnique({ where: { id: versionId }, select: { deliverable: { select: { speakerId: true, sponsorId: true } } } });
   if (!v || v.deliverable.speakerId !== owner.speakerId || v.deliverable.sponsorId !== owner.sponsorId) throw new ContentRefused('That version is not on this link');
   return addComment(versionId, 'submitter', body, false, clock);

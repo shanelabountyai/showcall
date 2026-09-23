@@ -1,9 +1,11 @@
-import { notFound, redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { notFound } from 'next/navigation';
 import { systemClock } from '@/src/clock';
 import { approve, override } from '@/src/content/lock';
 import { addDeliverable, addRule, addSponsor, ContentRefused, issuePortalToken, producerComment } from '@/src/content/pipeline';
 import { prisma } from '@/src/db';
 import { DeliverableKind, RuleCheck } from '@/src/generated/prisma/enums';
+import { IssueLink, type Issued } from '../../../issue-link';
 import { Versions } from '../../../versions';
 import { refusable } from '../refusable';
 
@@ -23,12 +25,12 @@ const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UT
 /**
  * Content turn-in, producer side (P0-5, D-015): who owes what, every version
  * with its validation, the comment thread, portal links, and the event's
- * rules. A portal link's raw token is shown once, on the redirect after
- * issuing — only its hash is stored, so it cannot be shown again.
+ * rules. A portal link's raw token is shown once, in the issuing form's
+ * state (SEC-04) — only its hash is stored, so it cannot be shown again.
  */
-export default async function Content({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ error?: string; link?: string; for?: string }> }) {
+export default async function Content({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ error?: string }> }) {
   const { eventId } = await params;
-  const { error, link, for: linkFor } = await searchParams;
+  const { error } = await searchParams;
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
@@ -54,15 +56,16 @@ export default async function Content({ params, searchParams }: { params: Promis
     await refusable(here, () => addDeliverable(eventId, ownerFrom(String(form.get('owner'))), String(form.get('kind')) as DeliverableKind, String(form.get('label'))), ContentRefused);
   }
 
-  async function doLink(form: FormData) {
+  async function doLink(_prev: Issued, form: FormData): Promise<Issued> {
     'use server';
     const owner = ownerFrom(String(form.get('owner')));
     const found = 'speakerId' in owner
       ? await prisma.speaker.findFirst({ where: { id: owner.speakerId, eventId } })
       : await prisma.sponsor.findFirst({ where: { id: owner.sponsorId, eventId } });
-    if (!found) redirect(`${here}?error=${encodeURIComponent('No such speaker or sponsor on this event')}`);
+    if (!found) return { error: 'No such speaker or sponsor on this event' };
     const token = await issuePortalToken(owner);
-    redirect(`${here}?link=${encodeURIComponent(token)}&for=${encodeURIComponent(found.name)}`);
+    revalidatePath(here);
+    return { url: `/portal/${token}`, for: found.name };
   }
 
   async function doComment(form: FormData) {
@@ -93,20 +96,11 @@ export default async function Content({ params, searchParams }: { params: Promis
     <main>
       <h1>{event.name} — content turn-in</h1>
       {error && <p role="alert">{error}</p>}
-      {link && (
-        <p role="status">
-          Portal link for {linkFor} — copy it now, it will not be shown again: <code>/portal/{link}</code>{' '}
-          <a href={`/portal/${link}`}>open</a>
-        </p>
-      )}
 
       {owners.filter((o) => o.deliverables.length > 0 || o.key.startsWith('sponsor:')).map((o) => (
         <section key={o.key} style={{ border: '1px solid #ccc', padding: 8, marginBottom: 12 }}>
           <h2>{o.name} <small>({o.key.split(':')[0]}{o.portalTokenHash ? ', link issued' : ''})</small></h2>
-          <form action={doLink}>
-            <input type="hidden" name="owner" value={o.key} />
-            <button type="submit">{o.portalTokenHash ? 'Reissue portal link (old one stops working)' : 'Issue portal link'}</button>
-          </form>
+          <IssueLink action={doLink} fields={{ owner: o.key }} label={o.portalTokenHash ? 'Reissue portal link (old one stops working)' : 'Issue portal link'} />
           {o.deliverables.map((d) => {
             const lock = d.locks.at(-1);
             return (

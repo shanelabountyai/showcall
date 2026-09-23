@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { addLine, budgetToActuals, BudgetRefused, takeSnapshot, updateLine } from '@/src/budget/budget';
 import { addVendor, complianceBoard, complianceOutbox, ComplianceRefused, KIND_LABEL, KINDS, recordDoc, sendComplianceNags, type ComplianceRow } from '@/src/budget/compliance';
+import { acceptCoi, pendingCoi, PortalRefused } from '@/src/callsheet/portal';
 import { systemClock } from '@/src/clock';
 import { prisma } from '@/src/db';
 import { BudgetCategory, type ComplianceKind } from '@/src/generated/prisma/enums';
@@ -37,14 +38,20 @@ export default async function Budget({ params, searchParams }: { params: Promise
   const board = await complianceBoard(eventId, systemClock).catch(() => null);
   if (!board) notFound();
   const here = `/events/${eventId}/budget`;
-  const [view, vendors, nags] = await Promise.all([
+  const [view, vendors, nags, uploaded] = await Promise.all([
     budgetToActuals(eventId),
     prisma.vendor.findMany({ orderBy: { name: 'asc' } }),
     complianceOutbox(eventId),
+    pendingCoi(eventId),
   ]);
   const worklist = board.rows.filter((r) => r.state !== 'ok');
   const flagged = new Set(worklist.map((r) => r.vendorId));
   const owed = board.rows.filter((r) => r.owed != null).length;
+
+  async function doAcceptCoi(form: FormData) {
+    'use server';
+    await refusable(here, () => acceptCoi(eventId, String(form.get('id')), String(form.get('expiresOn'))), PortalRefused, ComplianceRefused);
+  }
 
   async function doAddLine(form: FormData) {
     'use server';
@@ -177,6 +184,25 @@ export default async function Budget({ params, searchParams }: { params: Promise
           </tbody>
         </table>
         {board.rows.length === 0 && <p>No vendor has a line on this event yet.</p>}
+
+        {uploaded.length > 0 && (
+          <>
+            <h3>Certificates uploaded through the portal</h3>
+            <p>Nothing counts until you accept it. Open the file and enter the expiry printed on it.</p>
+            <ul aria-label="Uploaded certificates">
+              {uploaded.map((u) => (
+                <li key={u.id}>
+                  {u.vendor.name} ({u.role.name} link) · <a href={`/events/${eventId}/coi/${u.id}`}>{u.filename}</a> · {stamp(u.submittedAt)}
+                  <form action={doAcceptCoi}>
+                    <input type="hidden" name="id" value={u.id} />
+                    <label>Expires <input name="expiresOn" type="date" required defaultValue={fromDbDate(u.statedExpiresOn)} /></label>{' '}
+                    <button type="submit">Accept certificate</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         <h3>Record a document</h3>
         <form action={doDoc}>
