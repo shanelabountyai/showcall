@@ -389,3 +389,42 @@ a live escalation today.
 the send, and a real one swaps in behind `sendDueReminders`. No per-owner
 reminder preferences or quiet hours. No decide-by cues (P1, D-016's phase 4).
 No automatic package rebuild, per D-016.
+
+## Phase 2 gate: e2e and the demo story (S-11)
+
+**Problem.** The PRD's content capstone is "the 11pm v7": a speaker whose
+deck is already locked sends another one the night before. S-9 built the
+override and the package rebuild with unit tests, but no browser had been
+through them. A lock that works in unit tests and silently moves when
+someone uploads is exactly the failure the capstone exists to catch.
+
+**What it does.** The seed gives Hollis Grant a real history, with v1
+failing on fonts, v2–v5 as revisions and v6 locked as the show file. The new
+e2e spec then runs the whole story on a production build, like the rest of
+the sweep. Ballroom A's playback package starts at Package 1, current, with
+v6. The producer reissues Hollis's portal link, and the speaker uploads v7,
+which lands as *needs review*. v6 is still the show file and the package is
+still current, so a late upload is kept but changes nothing. Asking to
+override the lock back to v1 is refused with the fix named ("Embed your
+fonts"), because override re-validates against today's rules. That refusal is
+now proven in the browser, not just asserted. Overriding to v7 with a reason
+lands as `Lock 2: override v7` with the reason in the log. The package goes
+stale and names the change: `Removed: … v6`, `Added: … v7`. It stays stale
+until the producer clicks rebuild (D-016), then it is Package 2, current,
+with v7.
+
+**Defects found.** None in the product. The first draft of the spec was
+wrong: it expected the Phase 1 keynote move to leave Ballroom A's package
+stale. It doesn't, and that is correct. The moved Day 1 keynote belongs to
+Dana Reyes, who is only *invited* and owes no deck. Her session puts nothing
+in the manifest, so moving it changes no checksum. Staleness by content
+(D-009) did what it should and ignored a change that touches no file.
+
+**What it deliberately does not do.** No automatic rebuild after an override
+(D-016). No notice to the room's playback operator that a package changed.
+The stale flag on the packages page and the chase board are the signal.
+
+**Verdict.** Producer review asked for "the cutoff-with-override rule,
+exactly". **Validated.** Upload after lock never moves the pointer, override
+needs a reason and re-validates, and distribution follows only on rebuild.
+Gate passing: 124 vitest tests, 14 e2e specs against a production build.

@@ -22,7 +22,7 @@ prior gate's fixtures or demo story fail.
 | S-8 | Content turn-in pipeline, part 1: tokenized submission portal for speaker decks + sponsor deliverables, versioned uploads (v1…vN kept), comment/review cycle per version, technical validation rules-as-data with a plain-language fix list | ✅ |
 | S-9 | Content turn-in pipeline, part 2: approve → show-file lock (immutable), late-revision override (logged, re-validates), per-room distribution builder (checksummed manifest, running order from the agenda), stale-package flag that clears only on rebuild | ✅ |
 | S-10 | Chase dashboard: turn-in deadlines derived from show date minus lead time, reminder outbox, escalation worklist, bureau missing-item flags (no headshot, unsigned, unvalidated deck) and lifecycle funnel rolled in | ✅ |
-| S-11 | Phase 2 gate: e2e on a production build, demo story (a speaker submits v7 after lock → override, revalidate, distribution package rebuild) | 🔲 |
+| S-11 | Phase 2 gate: e2e on a production build, demo story (a speaker submits v7 after lock → override, revalidate, distribution package rebuild) | ✅ |
 
 Order follows the dependency chain, not the PRD's P0 numbering. Bureau (S-7)
 goes first because the portal in S-8 is per-speaker and the consent flags

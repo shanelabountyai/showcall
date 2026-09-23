@@ -95,7 +95,8 @@ const bureauPlan: Record<string, {
 // Content turn-in (P0-5, D-015/D-016): the default rule set, two sponsors, and
 // an approved, locked deck for every speaker at or past content_complete —
 // which the guard requires. Hollis Grant's deck shows the loop: v1 failed on
-// fonts, v2 fixed it. The brand-template check is `manual`, so every deck is
+// fonts, v2–v5 are revisions, v6 is the locked show file — so the Phase 2
+// gate's late upload is the PRD's "11pm v7". The brand-template check is `manual`, so every deck is
 // *needs review* until a producer's approval resolves it.
 const MB = 1024 * 1024;
 const rules: [Parameters<typeof addRule>[1], Parameters<typeof addRule>[2], object, string][] = [
@@ -151,6 +152,7 @@ for (const [name, plan] of Object.entries(bureauPlan)) {
     const file = (bytes: Uint8Array, filename: string) => ({ filename, mimeType: 'application/pdf', bytes });
     if (name === 'Hollis Grant') {
       await submitVersion(token, deck.id, file(await deckPdf(name, true), 'hollis-grant-deck.pdf'), systemClock);
+      for (let r = 2; r <= 5; r++) await submitVersion(token, deck.id, file(await deckPdf(name, false), `hollis-grant-deck-r${r}.pdf`), systemClock);
       portalLinks.push(`${name}: /portal/${token}`);
     }
     const final = await submitVersion(token, deck.id, file(await deckPdf(name, false), `${name.toLowerCase().replace(/\W+/g, '-')}-deck-final.pdf`), systemClock);

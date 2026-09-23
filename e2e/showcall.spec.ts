@@ -203,4 +203,60 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
         .toContainText('next (content complete) blocked: needs a bio and an approved deck');
     });
   });
+
+  test.describe('Phase 2 gate (S-11)', () => {
+    test('the 11pm v7: upload after lock → override with reason → revalidate → package rebuild', async ({ page }) => {
+      const ballroomA = page.getByRole('region', { name: 'Ballroom A — playback' });
+      const HOLLIS_DECK = 'Keynote: The next five years of value-based care — Hollis Grant: Session deck';
+      const keynoteRow = ballroomA.getByRole('row').filter({ hasText: 'Keynote: The next five years' });
+
+      // Ballroom A's seeded package carries Hollis's locked v6. (The Day 1 keynote move
+      // did not stale it: Dana Reyes is only invited, owes no deck, so nothing in the manifest moved.)
+      await page.goto(`/events/${eventId}/packages`);
+      await expect(ballroomA).toContainText('Package 1');
+      await expect(ballroomA).toContainText('current');
+      await expect(keynoteRow).toContainText('Session deck v6');
+
+      // Hollis's v6 is locked (seed). The speaker comes back with a v7 through the portal.
+      await page.goto(`/events/${eventId}/content`);
+      const hollis = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Hollis Grant/ }) });
+      await hollis.getByRole('button', { name: /Reissue portal link/ }).click();
+      await page.getByRole('status').getByRole('link', { name: 'open' }).click();
+      await page.getByLabel('File for Session deck').setInputFiles({ ...(await deck(false)), name: 'hollis-grant-deck-v7.pdf' });
+      await page.getByRole('button', { name: 'Upload' }).click();
+      const v7 = page.locator('li').filter({ hasText: /^v7 hollis-grant-deck-v7\.pdf/ });
+      await expect(v7).toContainText('needs review');
+      await expect(v7).not.toContainText('show file');
+      await expect(page.locator('li').filter({ hasText: /^v6 / })).toContainText('show file');
+
+      // A late upload is kept but moves nothing: the lock holds and the package stays current.
+      await page.goto(`/events/${eventId}/packages`);
+      await expect(ballroomA).toContainText('current');
+
+      // Override re-validates: a version that fails today's rules is refused, fix named.
+      await page.goto(`/events/${eventId}/content`);
+      const version = (n: number) => hollis.locator('li').filter({ hasText: new RegExp(`^v${n} `) });
+      await version(1).getByLabel('Override reason').fill('Wrong file');
+      await version(1).getByRole('button', { name: 'Override lock to this version' }).click();
+      await expect(page.locator('p[role="alert"]')).toContainText('Override refused — v1 fails validation: Embed your fonts');
+
+      await version(7).getByLabel('Override reason').fill('Speaker revised Q3 figures at 11pm');
+      await version(7).getByRole('button', { name: 'Override lock to this version' }).click();
+      await expect(hollis.getByRole('heading', { name: /Session deck \(deck\) — locked to v7/ })).toBeVisible();
+      await expect(hollis).toContainText('Lock 2: override v7');
+      await expect(hollis).toContainText('Speaker revised Q3 figures at 11pm');
+      await expect(version(7)).toContainText('show file');
+
+      // Distribution follows only on a producer's rebuild (D-016), and names what changed.
+      await page.goto(`/events/${eventId}/packages`);
+      await expect(ballroomA).toContainText('STALE — rebuild');
+      await expect(ballroomA).toContainText(`Removed: ${HOLLIS_DECK} v6`);
+      await expect(ballroomA).toContainText(`Added: ${HOLLIS_DECK} v7`);
+      await ballroomA.getByRole('button', { name: 'Rebuild package' }).click();
+      await expect(ballroomA).toContainText('Package 2');
+      await expect(ballroomA).toContainText('current');
+      await expect(keynoteRow).toContainText('Session deck v7');
+      await expect(ballroomA.getByRole('button', { name: 'Rebuild package' })).toHaveCount(0);
+    });
+  });
 });
