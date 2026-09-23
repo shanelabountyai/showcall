@@ -610,7 +610,33 @@ the limit is recorded in D-022.
 **What it deliberately does not do.** Execution (S-17), creating plans from
 the UI, and branches that save money or change the agenda (D-022).
 
-**Verdict.** Pending S-17. Producer review asked for decision trees that
-execute, and only half of that exists yet.
+**Verdict.** Validated by S-17 (below).
 Gate: 171 vitest tests; the new contingency e2e spec runs against a production build.
 
+
+## Branch execution (P0-7 part 2, S-17)
+
+Calling a branch is preview, then execute. The preview runs the branch's cue
+edits through the cascade against the run sheet as it is now, lists every row
+that moves (time, day or room), and names the call sheets whose cues it
+touches. Execute commits exactly that preview. The cue edits, the decision
+and the cost line land in one transaction. If anyone changed the sheet in
+between, the call is refused and nothing is written. Then only the call
+sheets whose content changed are re-issued. On the seeded rain call that is
+Catering and Doors & Registration, and not A1 Audio. The branch not taken
+stays on the plan, marked as such, and the decision log records what moved,
+the budget line, the notices sent and the sheets re-issued (D-023).
+
+**Defects found.** One, before any branch executed. The cascade's diff
+compared day and times only, so a room move produced an empty preview. The
+rain branch would have committed against a preview that showed nothing moving,
+which is the silent drift hard rule 1 exists to prevent. Timings now carry
+their room.
+
+**What it deliberately does not do.** A separate vendor-notice outbox (the
+decision is the send record), branches that change the agenda, and undoing a
+call. A decision is append-only, so reversing one is a new cue edit.
+
+**Verdict.** Validated. Producer review asked for decision trees that
+execute, and the rain call now executes at its decide-by cue with the same
+guarantee as any other run-sheet change.

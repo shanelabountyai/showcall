@@ -575,6 +575,7 @@ model BudgetLine {
   vendorId       String?
   attrition      AttritionDecision?
   contract       Contract?
+  contingency    ContingencyDecision?
 
   @@index([eventId])
 }
@@ -873,14 +874,21 @@ model ContingencyNotice {
   vendorId String
 }
 
-/// The call, once made. Append-only (trigger); one per plan. Written by S-17.
+/// The call, once made, and what it did. Append-only (trigger); one per plan.
+/// Written in the cascade's own transaction (D-023): the cue edits, this row
+/// and the cost line land together or not at all. The taken branch's notices
+/// went out at `decidedAt`; the branches not taken stay on the plan, unchanged.
 model ContingencyDecision {
-  id        String            @id @default(cuid())
-  decidedAt DateTime
-  plan      ContingencyPlan   @relation(fields: [planId], references: [id])
-  planId    String            @unique
-  branch    ContingencyBranch @relation(fields: [branchId], references: [id])
-  branchId  String
+  id           String            @id @default(cuid())
+  decidedAt    DateTime
+  plan         ContingencyPlan   @relation(fields: [planId], references: [id])
+  planId       String            @unique
+  branch       ContingencyBranch @relation(fields: [branchId], references: [id])
+  branchId     String
+  /// The cascade as committed — exactly the preview that was shown (Moved[]).
+  moved        Json
+  budgetLine   BudgetLine?       @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
+  budgetLineId String?           @unique
 }
 
 /// The escalation outbox: an unmade decision at its decide-by. Append-only.

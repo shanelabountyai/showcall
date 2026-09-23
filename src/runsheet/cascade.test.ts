@@ -85,6 +85,28 @@ describe('run-sheet cascade', () => {
     expect(await version(event.id)).toBe(1);
   });
 
+  it('a room move is a move: the preview shows it, a commit to another event\'s room is refused', async () => {
+    const { event, doors } = await show();
+    const lobby = await prisma.room.create({ data: { eventId: event.id, name: 'Lobby' } });
+    const change = { edits: [{ cueId: doors.id, roomId: lobby.id }] };
+    const preview = await previewCascade(event.id, change);
+    expect(preview.moved).toEqual([{ id: doors.id, from: { day: D1, startMin: 510, endMin: 510, room: 'Ballroom A' }, to: { day: D1, startMin: 510, endMin: 510, room: 'Lobby' } }]);
+    await commitCascade(event.id, change, preview.moved);
+    expect((await loadRunSheet(event.id)).rows.find((r) => r.id === doors.id)?.room).toBe('Lobby');
+
+    const other = await makeEvent();
+    const elsewhere = await prisma.room.create({ data: { eventId: other.id, name: 'Elsewhere' } });
+    await expect(previewCascade(event.id, { edits: [{ cueId: doors.id, roomId: elsewhere.id }] })).rejects.toThrow('No room');
+  });
+
+  it('a refusal in the commit\'s own writes undoes the cascade', async () => {
+    const { event, doors } = await show();
+    const change = { edits: [{ cueId: doors.id, offsetMin: -45 }] };
+    const preview = await previewCascade(event.id, change);
+    await expect(commitCascade(event.id, change, preview.moved, async () => { throw new Error('refused downstream'); })).rejects.toThrow('refused downstream');
+    expect((await prisma.cue.findUniqueOrThrow({ where: { id: doors.id } })).offsetMin).toBe(-30);
+  });
+
   it('an edit that closes a loop is named in preview and refused at commit', async () => {
     const { event, strike, reset } = await show();
     const change = { edits: [{ cueId: strike.id, anchorId: reset.id }] };

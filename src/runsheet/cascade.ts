@@ -14,7 +14,7 @@ import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem } from
  * version. A change that leaves any problem is refused whole, so fixing a
  * compression and the rebase that caused it land together or not at all.
  */
-export type CueEdit = { cueId: string } & Partial<Omit<CueSpec, 'id'>>;
+export type CueEdit = { cueId: string; roomId?: string } & Partial<Omit<CueSpec, 'id'>>;
 export type Change = { rebase?: boolean; edits?: CueEdit[] };
 export type CascadeResult = { agendaVersion: number; moved: Moved[]; problems: Problem[] };
 
@@ -38,12 +38,17 @@ async function sessionsAt(tx: Tx, eventId: string, number: number) {
   return v.snapshot as PublicSession[];
 }
 
-type CueRow = Awaited<ReturnType<Tx['cue']['findMany']>>[number];
-const toSpec = ({ eventId: _, roomId: __, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
-const cuesOf = (tx: Tx, eventId: string) => tx.cue.findMany({ where: { eventId }, orderBy: { id: 'asc' } });
+const cuesOf = (tx: Tx, eventId: string) => tx.cue.findMany({ where: { eventId }, orderBy: { id: 'asc' }, include: { room: { select: { name: true } } } });
+type CueRow = Awaited<ReturnType<typeof cuesOf>>[number];
+const toSpec = ({ eventId: _, roomId: __, room: ___, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
 
+/** Timings carry their room, so a move that changes only the room — a rain call — is still a move the preview shows. */
 async function resolveAt(tx: Tx, eventId: string, version: number) {
-  return resolveCues(await sessionsAt(tx, eventId, version), (await cuesOf(tx, eventId)).map(toSpec));
+  const [sessions, cues] = [await sessionsAt(tx, eventId, version), await cuesOf(tx, eventId)];
+  const resolved = resolveCues(sessions, cues.map(toSpec));
+  const room = new Map([...sessions.map((s) => [s.id, s.room] as const), ...cues.map((c) => [c.id, c.room.name] as const)]);
+  for (const [id, t] of resolved.timings) t.room = room.get(id);
+  return resolved;
 }
 
 async function lockEvent(tx: Tx, eventId: string) {
@@ -55,7 +60,10 @@ async function lockEvent(tx: Tx, eventId: string) {
 const dbDay = (day: string | null) => (day === null ? null : toDbDate(day));
 const cueData = ({ day, ...rest }: Partial<Omit<CueSpec, 'id'>>) => ({ ...rest, ...(day !== undefined && { day: dbDay(day) }) });
 
-async function applyChange(eventId: string, change: Change, expected?: Moved[]): Promise<CascadeResult> {
+/** Writes that must land with the cascade or not at all, run after the preview check passes. */
+export type Also = (tx: Tx, result: CascadeResult) => Promise<unknown>;
+
+async function applyChange(eventId: string, change: Change, expected?: Moved[], also?: Also): Promise<CascadeResult> {
   try {
     return await prisma.$transaction(async (tx) => {
       const pinned = await lockEvent(tx, eventId);
@@ -69,6 +77,7 @@ async function applyChange(eventId: string, change: Change, expected?: Moved[]):
         await tx.event.update({ where: { id: eventId }, data: { runSheetVersion: version } });
       }
       for (const { cueId, ...patch } of change.edits ?? []) {
+        if (patch.roomId !== undefined && !(await tx.room.findFirst({ where: { id: patch.roomId, eventId } }))) throw new Error(`No room ${patch.roomId} in event ${eventId}`);
         const { count } = await tx.cue.updateMany({ where: { id: cueId, eventId }, data: cueData(patch) });
         if (count !== 1) throw new Error(`No cue ${cueId} in event ${eventId}`);
       }
@@ -78,6 +87,7 @@ async function applyChange(eventId: string, change: Change, expected?: Moved[]):
       if (!expected) throw new Rollback(result);
       if (result.problems.length) throw new CascadeBlocked(result.problems);
       if (!isDeepStrictEqual(result.moved, expected)) throw new CascadeChanged(result);
+      await also?.(tx, result);
       return result;
     });
   } catch (e) {
@@ -92,8 +102,9 @@ export const previewCascade = (eventId: string, change: Change) => applyChange(e
 /**
  * Apply `change` atomically. `expected` is the preview's `moved`: the commit
  * refuses unless it moves exactly that, so what lands is what was shown.
+ * `also` writes in the same transaction — a refusal there undoes the cascade.
  */
-export const commitCascade = (eventId: string, change: Change, expected: Moved[]) => applyChange(eventId, change, expected);
+export const commitCascade = (eventId: string, change: Change, expected: Moved[], also?: Also) => applyChange(eventId, change, expected, also);
 
 /** Add a production cue. Refused, and not written, if the sheet then has any problem. */
 export const addCue = (eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) =>
@@ -117,17 +128,16 @@ export type RunSheetRow = { id: string; kind: 'session' | 'cue'; label: string; 
  */
 export async function loadRunSheet(eventId: string) {
   return prisma.$transaction(async (tx) => {
-    const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, include: { rooms: true } });
+    const event = await tx.event.findUniqueOrThrow({ where: { id: eventId } });
     const [sessions, cues, last] = await Promise.all([
       sessionsAt(tx, eventId, event.runSheetVersion),
       cuesOf(tx, eventId),
       tx.agendaVersion.findFirst({ where: { eventId }, orderBy: { number: 'desc' }, select: { number: true } }),
     ]);
     const { timings, problems } = resolveCues(sessions, cues.map(toSpec));
-    const roomName = new Map(event.rooms.map((r) => [r.id, r.name]));
     const rows: RunSheetRow[] = [
       ...sessions.map((s) => ({ id: s.id, kind: 'session' as const, label: s.title, room: s.room })),
-      ...cues.map((c) => ({ id: c.id, kind: 'cue' as const, label: c.label, room: roomName.get(c.roomId)! })),
+      ...cues.map((c) => ({ id: c.id, kind: 'cue' as const, label: c.label, room: c.room.name })),
     ].flatMap((r) => { const t = timings.get(r.id); return t ? [{ ...r, ...t }] : []; });
     rows.sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin || a.endMin - b.endMin);
     const currentVersion = last?.number ?? 0;

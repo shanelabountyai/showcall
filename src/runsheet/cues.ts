@@ -22,7 +22,8 @@ export type CueSpec = {
   anchorId: string | null; anchorEdge: Edge | null; offsetMin: number;
   endById: string | null; endByEdge: Edge | null; endByOffsetMin: number;
 };
-export type Span = { day: LocalDate; startMin: number; endMin: number };
+/** `room` is set by the cascade, which knows rooms; the pure graph never needs it. */
+export type Span = { day: LocalDate; startMin: number; endMin: number; room?: string };
 export type Timing = Span & { slack?: number };
 export type ProblemKind = 'cycle' | 'anchor_missing' | 'outside_day' | 'compressed';
 export type Problem = { kind: ProblemKind; cueId: string; message: string };
@@ -94,9 +95,9 @@ export function resolveCues(sessions: SessionTiming[], cues: CueSpec[]) {
   return { timings, problems };
 }
 
-const span = (t: Timing | undefined): Span | null => (t ? { day: t.day, startMin: t.startMin, endMin: t.endMin } : null);
+const span = (t: Timing | undefined): Span | null => (t ? { day: t.day, startMin: t.startMin, endMin: t.endMin, ...(t.room !== undefined && { room: t.room }) } : null);
 
-/** Everything whose day or times differ — the cascade a change implies. Slack alone is not a move. */
+/** Everything whose day, times or room differ — the cascade a change implies. Slack alone is not a move. */
 export function diffTimings(before: Map<string, Timing>, after: Map<string, Timing>): Moved[] {
   const ids = new Set([...after.keys(), ...before.keys()]);
   return [...ids].flatMap((id) => {

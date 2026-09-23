@@ -543,3 +543,41 @@ query. S-17 writes it.
 Not done: creating plans from the UI (the seed and `createPlan` only), and
 branches that change the agenda. "Hold the keynote 10 minutes" is a publish,
 not a cue edit, so a branch cannot express it.
+
+## D-023 · 2026-09-23 · Executing a branch: one transaction, the preview is the contract
+
+No picks were needed from Shane for S-17. Each choice follows from D-006 (the
+cascade is the only writer of the run sheet) and D-022.
+
+**The cascade learned rooms before it learned branches.** `CueEdit` takes
+`roomId` (checked against the event), and every timing now carries its room
+name, so `diffTimings` reports a move whose only change is the room. Without
+this, the rain branch's room move would have passed a preview that showed
+nothing. As a side effect, a rebase that moves a session to another room now
+shows up in its preview too.
+
+**The decision, the cue edits and the cost line are one transaction.**
+`commitCascade` takes an `also(tx, result)` hook that runs after the
+preview-equals-commit check, under the event lock. A refusal there undoes the
+cascade. The decision row stores the cascade exactly as committed (`moved`)
+and the budget line it posted (`budgetLineId`, unique). A second caller finds
+the decision under the lock and is refused.
+
+**Call sheets re-issue after the commit, not inside it.** `issueCallSheets`
+reads the committed run sheet and issues only the roles whose projection
+changed. A stale run sheet (agenda published past it) refuses to issue: the
+call still stands, and the sheets show stale. The re-issue is stamped with
+the decision's own instant, which is how the decision log names the sheets
+without a join table.
+
+**Vendor notices go out with the decision.** The decision row is the send
+record for the taken branch's notices (branches cannot be edited), so there is
+no separate outbox. Add one when a notice has to be delivered somewhere real.
+
+**The branch not taken is archived by staying where it is.** Branches are
+never edited or deleted once a decision references the plan (restrict FKs),
+so the plan shows both, marked taken or not taken.
+
+**The execute form carries the preview.** The `expected` cascade goes in a
+hidden field. If the sheet changed since the preview, the commit refuses
+(`CascadeChanged`) and nothing is written: no decision and no budget line.

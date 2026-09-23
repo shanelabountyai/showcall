@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { publishAgenda } from '../agenda/publish';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
-import { addCue, CascadeBlocked, commitCascade, loadRunSheet, previewCascade } from '../runsheet/cascade';
+import { issueCallSheets } from '../callsheet/callsheet';
+import { addCue, CascadeBlocked, CascadeChanged, commitCascade, loadRunSheet, previewCascade } from '../runsheet/cascade';
 import { makeEvent, makeSession, makeStaff, resetDb } from '../test/harness';
 import { toDbDate } from '../time';
-import { contingencyBoard, ContingencyRefused, createPlan, escalateAll, escalateDue, type PlanInput } from './contingency';
+import { contingencyBoard, ContingencyRefused, createPlan, escalateAll, escalateDue, executeBranch, previewBranch, type PlanInput } from './contingency';
 
 const D1 = '2026-10-13';
 const blank = { day: null, startMin: null, anchorId: null, anchorEdge: null, offsetMin: 0, endById: null, endByEdge: null, endByOffsetMin: 0 } as const;
@@ -115,13 +116,72 @@ describe('contingency plans', () => {
     const [foreign] = await prisma.contingencyBranch.findMany({ where: { planId: other.id } });
     const at = local(9).now();
 
-    await expect(prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: foreign!.id, decidedAt: at } })).rejects.toThrow();
-    await prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: own!.id, decidedAt: at } });
-    await expect(prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: own!.id, decidedAt: at } })).rejects.toThrow();
+    await expect(prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: foreign!.id, decidedAt: at, moved: [] } })).rejects.toThrow();
+    await prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: own!.id, decidedAt: at, moved: [] } });
+    await expect(prisma.contingencyDecision.create({ data: { planId: plan.id, branchId: own!.id, decidedAt: at, moved: [] } })).rejects.toThrow();
 
     const board = await contingencyBoard(event.id, local(12));
     expect(board.plans.map((p) => [p.title, p.state])).toEqual([['Rain call', 'decided'], ['Second call', 'overdue']]);
     expect(await escalateDue(event.id, local(12))).toBe(1);
     expect((await prisma.contingencyEscalation.findFirstOrThrow()).planId).toBe(other.id);
+  });
+});
+
+describe('executing a branch', () => {
+  /** A catering sheet that carries the reception, an audio sheet that does not; both issued before the call. */
+  async function called() {
+    const s = await show();
+    const plan = await createPlan(s.event.id, s.input);
+    const soundcheck = await addCue(s.event.id, s.ballroom.id, { ...blank, label: 'Soundcheck', durationMin: 30, day: D1, startMin: 480 });
+    const catering = await prisma.callRole.create({ data: { eventId: s.event.id, name: 'Catering' } });
+    const audio = await prisma.callRole.create({ data: { eventId: s.event.id, name: 'A1 Audio' } });
+    await prisma.cueRole.createMany({ data: [{ roleId: catering.id, cueId: s.reception.id }, { roleId: audio.id, cueId: soundcheck.id }] });
+    await issueCallSheets(s.event.id, local(8));
+    const branches = await prisma.contingencyBranch.findMany({ where: { planId: plan.id }, orderBy: { label: 'asc' } });
+    return { ...s, plan, catering, dry: branches[0]!, rain: branches[1]! };
+  }
+
+  it('the rain call: preview names the room move and the sheets it touches; commit lands it, the cost and exactly those sheets', async () => {
+    const { event, plan, reception, rain, catering } = await called();
+    const preview = await previewBranch(plan.id, rain.id);
+    expect(preview.problems).toEqual([]);
+    expect(preview.callSheets).toEqual(['Catering']);
+    expect(preview.moved.find((m) => m.id === reception.id)).toMatchObject({ from: { startMin: 1020, room: 'Terrace' }, to: { startMin: 1050, room: 'Ballroom' } });
+    expect(await prisma.contingencyDecision.count()).toBe(0);
+
+    const done = await executeBranch(plan.id, rain.id, preview.moved, local(9, 30));
+    expect(done).toMatchObject({ issued: [catering.id], blocked: null });
+    expect((await loadRunSheet(event.id)).rows.find((r) => r.id === reception.id)).toMatchObject({ room: 'Ballroom', startMin: 1050 });
+
+    const decision = await prisma.contingencyDecision.findUniqueOrThrow({ where: { planId: plan.id }, include: { budgetLine: true } });
+    expect(decision).toMatchObject({ branchId: rain.id, moved: preview.moved, decidedAt: local(9, 30).now() });
+    expect(decision.budgetLine).toMatchObject({ category: 'production', committedCents: 250_000, description: 'Rain call: Rain: move to the ballroom' });
+
+    const board = await contingencyBoard(event.id, local(12));
+    expect(board.plans[0]).toMatchObject({ state: 'decided', decision: { branch: { label: 'Rain: move to the ballroom' }, reissued: ['Catering (issue 2)'] } });
+    expect(board.plans[0]!.branches).toHaveLength(2); // the dry branch stays on the plan, not taken
+    await expect(previewBranch(plan.id, rain.id)).rejects.toThrow(ContingencyRefused);
+  });
+
+  it('a sheet changed since the preview refuses the call and writes nothing', async () => {
+    const { event, plan, reception, rain } = await called();
+    const preview = await previewBranch(plan.id, rain.id);
+    const edit = { edits: [{ cueId: reception.id, durationMin: 60 }] }; // someone trims the reception meanwhile
+    await commitCascade(event.id, edit, (await previewCascade(event.id, edit)).moved);
+
+    await expect(executeBranch(plan.id, rain.id, preview.moved, local(9, 30))).rejects.toBeInstanceOf(CascadeChanged);
+    expect(await prisma.contingencyDecision.count()).toBe(0);
+    expect(await prisma.budgetLine.count()).toBe(0);
+    expect((await loadRunSheet(event.id)).rows.find((r) => r.id === reception.id)?.room).toBe('Terrace');
+  });
+
+  it('the dry call moves nothing and costs nothing, and a plan is called once', async () => {
+    const { plan, dry, rain } = await called();
+    const preview = await previewBranch(plan.id, dry.id);
+    expect(preview).toMatchObject({ moved: [], callSheets: [] });
+    expect(await executeBranch(plan.id, dry.id, [], local(9))).toMatchObject({ issued: [], moved: [] });
+    expect(await prisma.contingencyDecision.findFirstOrThrow()).toMatchObject({ branchId: dry.id, budgetLineId: null });
+    await expect(executeBranch(plan.id, rain.id, [], local(9))).rejects.toThrow('already been called');
+    await expect(previewBranch(plan.id, 'not-a-branch')).rejects.toThrow(ContingencyRefused);
   });
 });

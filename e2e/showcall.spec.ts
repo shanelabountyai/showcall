@@ -378,5 +378,23 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(branch('Rain: move to Ballroom A')).toContainText('Lakeshore Catering: Reception service moves to Ballroom A');
       await expect(branch('Rain: move to Ballroom A')).toContainText('$3,800.00 production (Brightline AV)');
     });
+
+    test('the rain call executes: preview, commit, and only the sheets that carry the reception re-issue (S-17)', async ({ page }) => {
+      await page.goto(`/events/${eventId}/contingency`);
+      const rain = page.getByRole('region', { name: 'Rain call: closing reception' });
+      await rain.getByRole('link', { name: 'Preview Rain: move to Ballroom A' }).click();
+      const preview = rain.getByRole('region', { name: 'Preview' });
+      await expect(preview).toContainText(/Closing reception: 17:00–18:30 .*, Lakeview Terrace → 17:30–19:00 .*, Ballroom A/);
+      await expect(preview).toContainText('Call sheets re-issued: Catering, Doors & Registration.');
+      await preview.getByRole('button', { name: 'Execute Rain: move to Ballroom A' }).click();
+
+      await expect(rain.getByRole('heading').first()).toContainText('decided');
+      const log = rain.getByRole('region', { name: 'Decision log' });
+      await expect(log).toContainText('Budget: $3,800.00 committed as "Rain call: closing reception: Rain: move to Ballroom A"');
+      await expect(log).toContainText(/Call sheets re-issued: Catering \(issue \d+\), Doors & Registration \(issue \d+\)\./);
+      await expect(log).toContainText('Sent to Lakeshore Catering: Reception service moves to Ballroom A');
+      await expect(rain.getByRole('row').filter({ hasText: 'Dry: hold on the terrace' })).toContainText('not taken');
+      await expect(rain.getByRole('link', { name: /^Preview/ })).toHaveCount(0);
+    });
   });
 });
