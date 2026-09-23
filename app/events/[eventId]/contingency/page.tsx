@@ -87,6 +87,9 @@ export default async function Contingency({ params, searchParams }: { params: Pr
                 <h3>If you call &ldquo;{b.label}&rdquo;</h3>
                 {preview.moved.length ? <ul>{preview.moved.map((m) => <li key={m.id}>{moveLine(m, board.cueLabel)}</li>)}</ul> : <p>The run sheet stays as it is.</p>}
                 <p>Call sheets re-issued: {preview.callSheets.length ? preview.callSheets.join(', ') : 'none'}.</p>
+                {preview.warnings.length > 0 && (
+                  <ul aria-label="Work rules">{preview.warnings.map((w) => <li key={w.message}>{w.isNew ? 'New: ' : 'Already: '}{w.message}</li>)}</ul>
+                )}
                 {preview.problems.length > 0 && <ul role="alert">{preview.problems.map((x) => <li key={x.cueId + x.kind}>{x.message}</li>)}</ul>}
                 <form action={doExecute}>
                   <input type="hidden" name="planId" value={p.id} />

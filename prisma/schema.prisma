@@ -49,6 +49,7 @@ model Event {
   plans           ContingencyPlan[]
   venue           Venue?                @relation(fields: [venueId], references: [id])
   venueId         String?
+  crewRules       CrewRules?
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int                   @default(0)
 }
@@ -239,6 +240,17 @@ model CueRole {
 
 /// An issued call sheet. Append-only (trigger), like AgendaVersion: what a
 /// role was sent is kept exactly, and the next issue diffs against it.
+/// Crew work rules (P1-1, D-027): warnings on the run sheet, never refusals.
+model CrewRules {
+  event              Event  @relation(fields: [eventId], references: [id])
+  eventId            String @id
+  overtimeAfterMin   Int
+  mealWithinMin      Int
+  mealBreakMin       Int
+  mealPenaltyCents   Int
+  mealPenaltyStepMin Int
+}
+
 model CallSheetIssue {
   id            String            @id @default(cuid())
   number        Int

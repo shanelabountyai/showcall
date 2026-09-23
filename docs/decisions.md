@@ -711,3 +711,31 @@ and `X-Robots-Tag: noindex, nofollow`.
 Not done: rejecting a submission (a bad upload stays pending until a better
 one is accepted), W-9 upload, a PDF download on the portal, and per-token rate
 limits (SEC-07).
+
+## D-027 · 2026-09-23 · Crew work rules: a call role's call to wrap, warnings with a price, never a refusal
+
+No call needed from Shane; the defaults below are recorded so they are not
+re-opened.
+
+**The shift is a call role's, read from its cues.** A role is on the clock
+from its first tagged cue to its last on each day — the call and wrap its
+sheet prints. NEXT.md suggested S-5's `Assignment`, but an assignment is a
+fixed window the run sheet never moves, so no run-sheet edit could trip a rule
+on it; its daily cap is already refused by `assign` (S-5).
+
+**Rules are one `CrewRules` row per event**: straight-time day, meal limit,
+the gap that counts as a meal, and the penalty per started step. A database
+check keeps every limit and step positive. No row, no warnings. Edited in the
+seed, not the page, as room specs are (D-024).
+
+**Warnings, not problems.** A producer may choose to pay a penalty, so the
+cascade returns `warnings` beside `problems` and never refuses on them. Each
+carries `isNew`: the change caused it, as opposed to a warning the sheet
+already had. A meal penalty is priced in cents; overtime is in minutes,
+because no crew rate exists to price it. The branch preview and the call-sheet
+page show them; the crew portal does not (it shows stored issues only).
+
+Not done: per-crew overtime in reconciliation (would need rates and the GO
+log's actual wrap), turnaround between days, and an escalating penalty scale.
+A gap between cues is treated as paid time (a split call), so a long gap still
+counts toward the day.

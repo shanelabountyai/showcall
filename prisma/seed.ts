@@ -204,6 +204,9 @@ for (const day of [d1, d2]) {
 }
 // The closing reception is outdoors, which is what the rain call (below) is about.
 const reception = await cue('Lakeview Terrace', 'Closing reception', 90, { day: d2, startMin: at(17) }, ['Catering', 'Doors & Registration']);
+// House crew rules (D-027): ten straight-time hours, a meal inside six, $25 a started half hour after that.
+// Doors & Registration runs 8:30–18:30 on day 2, exactly ten hours, so the rain call's later reception is overtime.
+await prisma.crewRules.create({ data: { eventId: event.id, overtimeAfterMin: 600, mealWithinMin: 360, mealBreakMin: 30, mealPenaltyCents: 25_00, mealPenaltyStepMin: 30 } });
 await issueCallSheets(event.id, systemClock);
 
 // A chase pass a month ago, so the outbox has history and today's board still

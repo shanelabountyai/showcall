@@ -80,6 +80,8 @@ export async function callSheetStatus(eventId: string) {
     stale: !!last && (sheet.stale || changed),
     /** Issued, and the recipient has not confirmed it through the portal (P1-3). */
     awaitingReceipt: !!last && !last.receipt,
+    /** Work-rule warnings on this role's day as the run sheet stands (D-027). Producer side only. */
+    warnings: sheet.warnings.filter((w) => w.roleId === role.id).map((w) => w.message),
     changes: changed ? diffCallSheets(prev, content) : null,
   }));
 }

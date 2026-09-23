@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PublicSession } from '../agenda/publish';
+import { crewWarnings, type CrewWarning } from '../callsheet/workrules';
 import { prisma, type Tx } from '../db';
 import { fromDbDate, toDbDate } from '../time';
 import { venueProblems } from '../venue/rules';
-import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem } from './cues';
+import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem, type Timing } from './cues';
 
 /**
  * The run sheet on disk: cue specs plus the agenda version they resolve
@@ -17,7 +18,8 @@ import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem } from
  */
 export type CueEdit = { cueId: string; roomId?: string } & Partial<Omit<CueSpec, 'id'>>;
 export type Change = { rebase?: boolean; edits?: CueEdit[] };
-export type CascadeResult = { agendaVersion: number; moved: Moved[]; problems: Problem[] };
+/** `warnings` are crew work rules (D-027): shown, never refused. `isNew` means this change caused it. */
+export type CascadeResult = { agendaVersion: number; moved: Moved[]; problems: Problem[]; warnings: (CrewWarning & { isNew: boolean })[] };
 
 /** The change leaves problems; nothing was written. */
 export class CascadeBlocked extends Error {
@@ -54,7 +56,15 @@ async function resolveAt(tx: Tx, eventId: string, version: number) {
   const room = new Map([...sessions.map((s) => [s.id, s.room] as const), ...cues.map((c) => [c.id, c.room.name] as const)]);
   for (const [id, t] of resolved.timings) t.room = room.get(id);
   resolved.problems.push(...venueProblems(venue, cues.flatMap((c) => (c.load ? [{ ...c.load, label: c.label, room: c.room }] : [])), resolved.timings));
-  return resolved;
+  return { ...resolved, warnings: await warningsAt(tx, eventId, resolved.timings) };
+}
+
+async function warningsAt(tx: Tx, eventId: string, timings: Map<string, Timing>) {
+  const [rules, roles] = [
+    await tx.crewRules.findUnique({ where: { eventId } }),
+    await tx.callRole.findMany({ where: { eventId }, orderBy: { name: 'asc' }, select: { id: true, name: true, cues: { select: { cueId: true } } } }),
+  ];
+  return crewWarnings(rules, roles.map((r) => ({ id: r.id, name: r.name, cueIds: r.cues.map((c) => c.cueId) })), timings);
 }
 
 async function lockEvent(tx: Tx, eventId: string) {
@@ -89,7 +99,9 @@ async function applyChange(eventId: string, change: Change, expected?: Moved[], 
       }
 
       const after = await resolveAt(tx, eventId, version);
-      const result = { agendaVersion: version, moved: diffTimings(before.timings, after.timings), problems: after.problems };
+      const had = new Set(before.warnings.map((w) => w.message));
+      const warnings = after.warnings.map((w) => ({ ...w, isNew: !had.has(w.message) }));
+      const result = { agendaVersion: version, moved: diffTimings(before.timings, after.timings), problems: after.problems, warnings };
       if (!expected) throw new Rollback(result);
       if (result.problems.length) throw new CascadeBlocked(result.problems);
       if (!isDeepStrictEqual(result.moved, expected)) throw new CascadeChanged(result);
@@ -157,6 +169,7 @@ export async function loadRunSheet(eventId: string) {
     ].flatMap((r) => { const t = timings.get(r.id); return t ? [{ ...r, ...t }] : []; });
     rows.sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin || a.endMin - b.endMin);
     const currentVersion = last?.number ?? 0;
-    return { agendaVersion: event.runSheetVersion, currentVersion, stale: event.runSheetVersion < currentVersion, rows, problems };
+    const warnings = await warningsAt(tx, eventId, timings);
+    return { agendaVersion: event.runSheetVersion, currentVersion, stale: event.runSheetVersion < currentVersion, rows, problems, warnings };
   });
 }

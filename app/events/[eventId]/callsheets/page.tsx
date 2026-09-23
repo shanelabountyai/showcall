@@ -71,6 +71,7 @@ export default async function CallSheets({ params, searchParams }: { params: Pro
               {s.stale && ' · NEEDS RE-ISSUE'}
               {s.lastIssue > 0 && (confirmedAt ? ` · receipt confirmed ${stamp(confirmedAt)}` : ' · awaiting receipt')}
             </p>
+            {s.warnings.length > 0 && <ul aria-label="Work rules">{s.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
             <form action={doVendor}>
               <input type="hidden" name="roleId" value={s.roleId} />
               <label>Vendor{' '}

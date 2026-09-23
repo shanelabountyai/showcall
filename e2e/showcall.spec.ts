@@ -440,6 +440,8 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(preview).toContainText(/Closing reception: 17:00–18:30 .*, Lakeview Terrace → 17:30–19:00 .*, Ballroom A/);
       await expect(preview).toContainText(/Load-out: Brightline AV: 19:00–22:00 .* → 19:30–22:30/);
       await expect(preview).toContainText('Call sheets re-issued: Catering, Doors & Registration.');
+      // Work rules warn, never block (D-027): the later reception runs the door crew past ten hours.
+      await expect(preview.getByRole('list', { name: 'Work rules' })).toContainText(/New: Doors & Registration .*: on the clock 8:\d\d–19:00, \d+ min past the 10:00 straight-time day/);
       await preview.getByRole('button', { name: 'Execute Rain: move to Ballroom A' }).click();
 
       await expect(rain.getByRole('heading').first()).toContainText('decided');

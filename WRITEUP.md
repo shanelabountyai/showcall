@@ -762,3 +762,30 @@ staleness. Stale means the sheet needs issuing, and only issuing clears it.
 Awaiting receipt means an issue has not been acknowledged, and a receipt
 clears it. The PRD's "receipt clears the re-issue flag" folded the two
 together.
+
+## Crew work rules (P1-1, S-22)
+
+Each event can carry its crew rules as data: how long a straight-time day is,
+how long crew can go without a meal, what gap counts as a meal, and what a
+meal penalty costs per started half hour. A call role is on the clock from its
+first cue of the day to its last. Any run-sheet change now comes back with
+warnings: "Doors & Registration: on the clock 8:30–19:00, 30 min past the
+10:00 straight-time day", or a meal penalty with its dollar figure. Each
+warning says whether this change caused it. In the seed, previewing the rain
+call shows the later reception putting the door crew into overtime, and the
+call sheets page lists every warning the sheet currently carries (D-027).
+
+**Defects found.** One, in the session, not the code. Prisma's generated
+migration carried drift from an earlier hand-written composite key. It failed
+halfway and dropped that foreign key from the test database. A contingency
+test that relies on the key caught it, and the key was restored.
+
+**What it deliberately does not do.** Refuse anything, price overtime (there
+are no crew rates), check turnaround between days, or feed overtime into the
+reconciliation.
+
+**Verdict.** Changed. Producer review #6 asked for these as rules. They ship as
+warnings rather than refusals, because paying a meal penalty is sometimes the
+right call. The producer should see the cost before committing the change,
+not be blocked by it. The shift turned out to belong to the call role, not to
+the staff assignment: only the role's day moves when the run sheet does.
