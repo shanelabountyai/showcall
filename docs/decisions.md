@@ -310,3 +310,38 @@ yet — which the bureau's missing-item flags say directly.
 parallel list, and the "next step blocked" line is `nextStepBlocked()` — the
 same table `advance()` enforces. The board cannot disagree with the lifecycle
 about whether a deck is approved, because it is not forming its own opinion.
+
+## D-018 · 2026-09-23 · Phases 3–4 run the budget sink first; P1s are ranked by what they reuse
+
+**Phase 3 is S-12 budget → S-13 attrition → S-14 RFP → S-15 gate.** The PRD
+lists attrition and RFP first and calls the budget "spine", but three later
+features post money into it: accepted attrition exposure, RFP awards, and
+contingency cost deltas. Building the ledger first means each of those writes
+a real committed line from its first day. Otherwise all three would need
+retrofitting, which is what D-012 avoided for consent. Vendor compliance goes
+with the budget because the vendor record is what an award lands on, and an
+award to a vendor whose COI has lapsed should be flagged when it happens.
+
+Attrition comes before RFP because it is the smaller surface and its money
+link is one line (an accepted exposure), so S-13 proves the sink before S-14
+leans on it hard. Registration headcount rides with RFP (S-14) and not with
+the budget: per-head catering lines are the only thing in scope that reads
+it.
+
+**Phase 4 is S-16 plans → S-17 execution → S-18 venue profiles → S-19
+capstone.** Contingency splits the way the pipeline did (D-012): the data and
+the decide-by cue first, then execution through the existing cascade, with
+the rain-call fixture landing in S-17. Venue profiles are the last of P0-8.
+They sit in Phase 4 because load-in and load-out slots are run-sheet cues,
+and the capstone should run with every P0 in place.
+
+**The P1s come after the capstone and are ranked by reuse.** The PRD asks for
+"P1 in ranked order" without giving a ranking. The order here is: P1-5
+reconciliation (the GO log from D-010 already holds the actual times), P1-3
+vendor portal (the token pattern from S-8 plus compliance from S-12), P1-1
+crew rules (rules-as-data, as in validation), P1-6 client approvals, P1-7
+dietary rollups (needs S-14's registration), P1-4 cross-event conflicts (the
+crew model already counts capacity across events, so part of it exists), and
+P1-2 attendee distribution last, because it needs an attendee delivery channel
+and attendee-facing features are a non-goal. This is a default, not a verdict.
+Re-rank it at S-19 if the capstone shows a different gap.

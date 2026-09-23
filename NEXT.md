@@ -1,15 +1,15 @@
 # Next
 
-**Scope Phase 3 into items.** Phase 2's gate (S-11) passed, so per
-`docs/backlog.md` Phase 3–4 now gets broken into items: attrition + RFP +
-budget (P0-5, P0-6), then contingency + P1s (P0-7). Same shape as commit
-f00a6a1 (Phase 2 scoping): the items in dependency order, with the reasoning
-logged as a decision. Recommend Opus. It is architecture work, and the
-order sets up everything after it.
+**S-12 — budget spine.** Vendors, compliance docs (COI, W-9) with expiry and
+nag worklist, budget lines per event/category (committed vs. actual, integer
+cents, client-billable), append-only budget snapshots, budget-to-actuals view.
+It goes first because attrition, RFP awards and contingency deltas all post
+into it (D-018). Recommend Opus. It is money, and three later items write to
+this ledger.
 
-State after S-11:
-- Gate is green: 124 unit tests, 14 e2e on a production build.
-- Seed change: Hollis Grant's deck is now v1–v6 with v6 locked, so the demo's
-  late upload is v7. Re-seed dev (`npm run db:seed`) before demoing.
-- The gate story is browser-only (e2e spec "Phase 2 gate (S-11)"). No
-  script needed; `scripts/demo.ts` still covers the Phase 1 backend half.
+Open question for S-12: `Reminder` is keyed to a `Deliverable`. The compliance
+nag worklist needs either a generalized outbox or a sibling table. Decide it
+in S-12, not before.
+
+State: Phase 2 gate green (124 unit, 14 e2e). Phases 3–4 scoped as S-12..S-26
+in `docs/backlog.md`.
