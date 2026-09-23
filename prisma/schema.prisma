@@ -40,6 +40,9 @@ model Event {
   rules        ValidationRule[]
   packages     DistributionPackage[]
   deadlines    DeadlinePolicy[]
+  budget       BudgetLine[]
+  snapshots    BudgetSnapshot[]
+  nags         ComplianceReminder[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int         @default(0)
 }
@@ -485,4 +488,97 @@ model Reminder {
   sentAt        DateTime
 
   @@unique([deliverableId, step])
+}
+
+/// A company Showcall buys from. House-wide, like Staff: one caterer across
+/// every event, one COI on file for all of them.
+model Vendor {
+  id    String               @id @default(cuid())
+  name  String               @unique
+  docs  ComplianceDoc[]
+  lines BudgetLine[]
+  nags  ComplianceReminder[]
+}
+
+enum ComplianceKind {
+  coi
+  w9
+}
+
+/// A compliance document received. Append-only (trigger): a renewal is a new
+/// row, and the one in force is the latest received. A W-9 does not expire; a
+/// COI must (check constraint).
+model ComplianceDoc {
+  id         String         @id @default(cuid())
+  kind       ComplianceKind
+  receivedOn DateTime       @db.Date
+  expiresOn  DateTime?      @db.Date
+  vendor     Vendor         @relation(fields: [vendorId], references: [id])
+  vendorId   String
+}
+
+/// The compliance nag outbox (D-019) — Reminder's sibling, not a
+/// generalization of it. Append-only. The cadence is the unique key again, and
+/// `dueOn` is in it, so a renewal that moves the due day starts a fresh cadence.
+model ComplianceReminder {
+  id       String         @id @default(cuid())
+  event    Event          @relation(fields: [eventId], references: [id])
+  eventId  String
+  vendor   Vendor         @relation(fields: [vendorId], references: [id])
+  vendorId String
+  kind     ComplianceKind
+  dueOn    DateTime       @db.Date
+  step     Int
+  body     String
+  sentAt   DateTime
+
+  @@unique([eventId, vendorId, kind, dueOn, step])
+}
+
+enum BudgetCategory {
+  venue
+  av
+  catering
+  decor
+  staffing
+  talent
+  travel
+  production
+  other
+}
+
+/// One line of an event's budget (P0-8). Integer cents, never negative.
+/// Committed is what is contracted; actual is what has been invoiced. Lines
+/// are working state — the history is the snapshots.
+model BudgetLine {
+  id             String         @id @default(cuid())
+  category       BudgetCategory
+  description    String
+  committedCents Int
+  actualCents    Int            @default(0)
+  clientBillable Boolean        @default(true)
+  event          Event          @relation(fields: [eventId], references: [id])
+  eventId        String
+  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
+  vendorId       String?
+
+  @@index([eventId])
+}
+
+/// A frozen copy of the budget. Append-only (trigger), numbered per event.
+/// `lines` is the full line list as it stood; totals are columns so a
+/// comparison never re-adds JSON.
+model BudgetSnapshot {
+  id             String   @id @default(cuid())
+  number         Int
+  label          String
+  takenAt        DateTime
+  committedCents Int
+  actualCents    Int
+  billableCents  Int
+  lines          Json
+  event          Event    @relation(fields: [eventId], references: [id])
+  eventId        String
+
+  @@unique([eventId, number])
 }

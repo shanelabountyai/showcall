@@ -259,4 +259,49 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(ballroomA.getByRole('button', { name: 'Rebuild package' })).toHaveCount(0);
     });
   });
+
+  test.describe('budget spine (S-12)', () => {
+    test('budget-to-actuals shows drift since the snapshot, and a lapsing COI flags the line', async ({ page }) => {
+      await page.goto(`/events/${eventId}/budget`);
+      const view = page.getByRole('region', { name: 'Budget to actuals' });
+      // The LED change order after "Client-approved v1" is the only drift.
+      await expect(view).toContainText('+$1,850.00 since snapshot 1 (Client-approved v1)');
+      await expect(view.getByRole('row').filter({ hasText: /^av/ })).toContainText('+$1,850.00');
+
+      const led = page.getByRole('region', { name: 'Budget lines' }).getByRole('row').filter({ hasText: 'LED wall' });
+      await expect(led).toContainText('Brightline AV · compliance outstanding');
+
+      const worklist = page.getByRole('region', { name: 'Compliance worklist' });
+      await expect(worklist.getByRole('row').filter({ hasText: 'Brightline AV' }).filter({ hasText: 'certificate of insurance' })).toContainText('lapses before the show');
+      await expect(worklist.getByRole('row').filter({ hasText: 'Petal & Stem' }).filter({ hasText: 'W-9' })).toContainText('not on file');
+    });
+
+    test('actuals are typed as dollars and land as cents; a bad amount is refused by name', async ({ page }) => {
+      await page.goto(`/events/${eventId}/budget`);
+      const florals = page.getByRole('region', { name: 'Budget lines' }).getByRole('row').filter({ hasText: 'Stage florals' });
+      await florals.getByLabel('Actual for Stage florals').fill('2,712.40');
+      await florals.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByRole('region', { name: 'Budget to actuals' }).getByRole('row').filter({ hasText: /^decor/ })).toContainText('+$112.40');
+
+      await florals.getByLabel('Actual for Stage florals').fill('12.345');
+      await florals.getByRole('button', { name: 'Save' }).click();
+      await expect(page.locator('p[role="alert"]')).toContainText('"12.345" is not an amount');
+    });
+
+    test('recording the renewal clears the flag, and the nag cadence sends once', async ({ page }) => {
+      await page.goto(`/events/${eventId}/budget`);
+      const send = page.getByRole('button', { name: /Send due nags \(\d+\)/ });
+      await send.click();
+      await expect(page.getByRole('button', { name: 'Send due nags (0)' })).toBeDisabled();
+      await expect(page.getByRole('region', { name: 'Nag outbox' })).toContainText('Petal & Stem');
+
+      await page.getByLabel('Document vendor').selectOption({ label: 'Brightline AV' });
+      await page.getByLabel('Document kind').selectOption('coi');
+      await page.getByLabel('Received').fill('2026-01-01');
+      await page.getByLabel('Expires').fill('2030-01-01');
+      await page.getByRole('button', { name: 'Record' }).click();
+      const led = page.getByRole('region', { name: 'Budget lines' }).getByRole('row').filter({ hasText: 'LED wall' });
+      await expect(led).not.toContainText('compliance outstanding');
+    });
+  });
 });

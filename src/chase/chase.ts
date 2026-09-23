@@ -21,7 +21,7 @@ export class ChaseRefused extends Error {}
 export const CADENCE = [14, 7, 3, 0, -3, -7] as const;
 
 /** Inside this many days, a deliverable is on the worklist even though it is not late yet. */
-const WARN_DAYS = 3;
+export const WARN_DAYS = 3;
 
 /**
  * The most urgent cadence step reached at `daysLeft`, or null before the

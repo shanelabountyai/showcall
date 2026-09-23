@@ -428,3 +428,60 @@ The stale flag on the packages page and the chase board are the signal.
 exactly". **Validated.** Upload after lock never moves the pointer, override
 needs a reason and re-validates, and distribution follows only on rebuild.
 Gate passing: 124 vitest tests, 14 e2e specs against a production build.
+
+## Budget spine and vendor compliance (P0-8, S-12)
+
+**Problem.** An event budget usually lives in a spreadsheet that someone
+re-saves as `v3-FINAL-client`, and the question "what changed since the
+client signed off" gets answered by scrolling two copies side by side. Vendor
+paperwork lives in an inbox. The failure it causes is specific: the AV
+company's certificate of insurance lapses on day one of the show, and nobody
+notices until the venue asks for it at the dock.
+
+**What it does.** Budget lines per event and category, in integer cents,
+with committed (contracted) and actual (invoiced) amounts and a
+client-billable flag. The budget-to-actuals view gives per-category and
+overall totals, the variance, and the client-billable split, all from one
+`summarize()` function. The same function reads live lines and a snapshot's
+frozen ones, so the two can never be added up differently. Snapshots are
+append-only and numbered per event. The view shows drift against the latest
+one, per category, so "since the client-approved budget, AV is up $1,850"
+is a line on the page, not a diff done by hand.
+
+This is the ledger the rest of Phase 3 posts into (D-018): accepted
+attrition exposure (S-13), RFP awards (S-14) and contingency cost deltas
+(S-17) each become a line here.
+
+Vendors are house-wide, and a vendor ends up on an event's compliance
+worklist for one reason: it has a budget line on that event. It then needs
+a W-9 on file and a certificate of insurance in force through the event's
+last day. As in the chase (D-017), due days are derived, never stored. A
+missing document is due at the event's start, and a COI that lapses before
+the show is due on its own expiry date. A line whose vendor has outstanding
+papers says so next to the money. The nag outbox reuses the chase's cadence
+function rather than copying it, and its unique key includes the due day, so
+a renewal that still falls short starts a fresh cadence with no reset code.
+
+Dollars typed into the page are parsed to cents with integer arithmetic.
+`12.345` is refused by name, not rounded.
+
+**Defects found.** None in the product. Two first drafts of tests were
+wrong, and both mistakes confirmed a rule. A unit test expected a renewal
+due 16 days out to owe a nag, but the cadence starts at 14 days and never
+fires early. An e2e spec located the error message with
+`getByRole('alert')`, which also matches Next.js's own empty route
+announcer. The older specs had already settled on `p[role="alert"]`.
+
+**What it deliberately does not do.** No document upload yet: a document is
+recorded as received with its dates, and vendors upload through the S-21
+portal. No approval gate on budget changes (P1-6, S-23). No markup or fee
+lines beyond the client-billable flag. No mail transport behind the nag
+outbox, the same call as the chase.
+
+**Verdict.** Producer review asked for vendor compliance "with expiry
+tracking and nag worklist". **Validated, with one scoping change.** The
+worklist is per event and asks only of vendors with money on that event, and
+"in force" means through the event's last day rather than as of today. A COI
+that is valid now but lapses mid-show is exactly the case that bites.
+Gate: 141 vitest tests; the 3 new budget e2e specs pass against a production
+build.

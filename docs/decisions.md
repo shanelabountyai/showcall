@@ -345,3 +345,50 @@ crew model already counts capacity across events, so part of it exists), and
 P1-2 attendee distribution last, because it needs an attendee delivery channel
 and attendee-facing features are a non-goal. This is a default, not a verdict.
 Re-rank it at S-19 if the capstone shows a different gap.
+
+## D-019 · 2026-09-23 · Compliance nags get a sibling outbox; a budget line is what asks for papers
+
+Settles the open question S-10 left for S-12. Shane's picks were not needed.
+Each of these follows from a rule already set, and each is recorded because
+it had a tempting wrong answer.
+
+**`ComplianceReminder` is a sibling of `Reminder`, not a generalization of
+it.** Generalizing would have meant nullable foreign keys (deliverable *or*
+vendor), a check that exactly one is set, and a migration of rows that are
+append-only by trigger. Two narrow tables keep real foreign keys and share
+the only thing actually common to them, the cadence: `cadenceStep()` and
+`WARN_DAYS` are imported from `src/chase/chase.ts`, not copied. An outbox
+that covers every kind of reminder can be a `UNION` view later if a page ever
+needs one. None does yet.
+
+**The cadence key includes the due day.** `ComplianceReminder` is unique on
+`(eventId, vendorId, kind, dueOn, step)`. A renewal that still lapses before
+the show moves the due day, so its nags start a fresh cadence with no reset
+code. The same key also makes each nag per event, which is right, because
+the due day depends on the event's dates.
+
+**A vendor needs papers for an event because it has a budget line on that
+event.** Nothing else puts a vendor on the worklist, so a vendor Showcall
+has never paid is never nagged. Vendors and their documents are house-wide,
+like `Staff`: one COI on file covers every event it spans.
+
+**Due days derive, as in D-017.** A missing document is due on the event's
+first day. A COI that lapses before the event's *last* day is due on its own
+expiry date. "In force through the last show day" counts as covered. A W-9
+has no expiry, and a COI must have one. Both rules are a check constraint as
+well as a refusal. Documents are append-only: a renewal is a new row, and the
+latest one received is the one in force.
+
+**Budget lines are working state; history is the snapshots.** Actuals arrive
+as invoices do, and a change order moves a commitment, so a line is
+editable. Every figure it ever held that mattered was frozen into an
+append-only `BudgetSnapshot`, and the view shows drift against the latest
+snapshot. An append-only line ledger (every change a new row) was the
+alternative. It would make the view re-derive current state on every read,
+to answer a question the snapshots already answer. Lines cannot go negative
+(check constraint). A credit is its own line, not a sign flip hidden inside a
+total.
+
+**Dollars are parsed to cents without a float.** `parseCents()` splits the
+typed string on the decimal point and does integer arithmetic. `"12.345"` is
+refused by name, not rounded.

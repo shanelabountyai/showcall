@@ -1,15 +1,14 @@
 # Next
 
-**S-12 — budget spine.** Vendors, compliance docs (COI, W-9) with expiry and
-nag worklist, budget lines per event/category (committed vs. actual, integer
-cents, client-billable), append-only budget snapshots, budget-to-actuals view.
-It goes first because attrition, RFP awards and contingency deltas all post
-into it (D-018). Recommend Opus. It is money, and three later items write to
-this ledger.
+**S-13 — room-block attrition (P0-5).** Blocks as rooms × nights × rate with
+dated thresholds; pickup vs. required pace, shortfall in cents at each
+threshold, cutoff release — all by fixture. Alerts ahead of penalty dates are
+framed as a decision ("release 10 by Friday or accept $2,400") and logged.
+**Accepted exposure posts to the budget** as a line via `addLine()` in
+`src/budget/budget.ts` (the sink S-12 built; D-018, D-019). Speaker, staff
+and VIP rooms draw from the block and count toward pickup. Recommend Opus:
+it is money math with penalty dates.
 
-Open question for S-12: `Reminder` is keyed to a `Deliverable`. The compliance
-nag worklist needs either a generalized outbox or a sibling table. Decide it
-in S-12, not before.
-
-State: Phase 2 gate green (124 unit, 14 e2e). Phases 3–4 scoped as S-12..S-26
-in `docs/backlog.md`.
+State: S-12 shipped (141 unit tests; the 3 budget e2e specs pass on a
+production build; full e2e sweep left to CI). The budget page is
+`/events/[id]/budget`.

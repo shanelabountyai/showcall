@@ -11,6 +11,8 @@ import { saveSession } from '../src/agenda/grid';
 import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
+import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
+import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
 import { sendDueReminders, setLeadDays } from '../src/chase/chase';
 import { DAY, fixedClock, systemClock } from '../src/clock';
 import { buildPackage } from '../src/content/distribution';
@@ -22,7 +24,7 @@ import { addCue, commitCascade, loadRunSheet, previewCascade } from '../src/runs
 import type { CueSpec } from '../src/runsheet/cues';
 import { assign } from '../src/staffing/staffing';
 import { resetDb } from '../src/test/harness';
-import { daysBetween, fromDbDate, localNow, toDbDate } from '../src/time';
+import { addDays, daysBetween, fromDbDate, localNow, toDbDate } from '../src/time';
 
 if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed in production');
 
@@ -232,6 +234,30 @@ for (const row of due) {
   });
 }
 
+// Budget and vendors. Brightline's COI lapses on day 1 and Petal & Stem has no
+// W-9, so the compliance worklist has real debts; a change order after the
+// client-approved snapshot gives the view some drift to show.
+const vendor = {} as Record<'Lakeshore Catering' | 'Brightline AV' | 'Petal & Stem', { id: string }>;
+for (const name of ['Lakeshore Catering', 'Brightline AV', 'Petal & Stem'] as const) vendor[name] = await addVendor(name);
+await recordDoc(vendor['Lakeshore Catering'].id, 'coi', addDays(d1, -200), addDays(d1, 165));
+await recordDoc(vendor['Lakeshore Catering'].id, 'w9', addDays(d1, -200), null);
+await recordDoc(vendor['Brightline AV'].id, 'coi', addDays(d1, -365), d1);
+await recordDoc(vendor['Brightline AV'].id, 'w9', addDays(d1, -365), null);
+await recordDoc(vendor['Petal & Stem'].id, 'coi', addDays(d1, -30), addDays(d1, 335));
+const line = async (category: Parameters<typeof addLine>[1]['category'], description: string, dollars: number, v?: keyof typeof vendor, clientBillable = true) =>
+  addLine(event.id, { category, description, committedCents: dollars * 100, vendorId: v && vendor[v].id, clientBillable });
+await line('venue', 'Ballroom and salons, two days', 48_000);
+const led = await line('av', 'LED wall and switcher', 18_000, 'Brightline AV');
+await line('av', 'Breakout audio packages', 6_400, 'Brightline AV');
+const lunch = await line('catering', 'Lunch, 420 covers × 2 days', 30_240, 'Lakeshore Catering');
+await line('catering', 'Crew meals', 1_800, 'Lakeshore Catering', false);
+await line('decor', 'Stage florals', 2_600, 'Petal & Stem');
+await line('talent', 'Keynote honoraria', 25_000);
+await takeSnapshot(event.id, 'Client-approved v1', fixedClock(new Date(systemClock.now().getTime() - 21 * DAY)));
+await updateLine(led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); // change order: second IMAG camera; deposit invoiced
+await updateLine(lunch.id, { actualCents: 15_120_00 });
+const nags = await sendComplianceNags(event.id, fixedClock(new Date(systemClock.now().getTime() - 10 * DAY))).catch(() => 0);
+
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
-console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders. /events/${event.id}/live`);
+console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags. /events/${event.id}/live`);
 await prisma.$disconnect();
