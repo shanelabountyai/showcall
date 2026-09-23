@@ -574,3 +574,11 @@ answer on every line did the most work, because it turns "they didn't mention
 it" into a visible gap instead of an assumption.
 Gate: 166 vitest tests; the full e2e spec (19) passes against a production
 build, including the new RFP compare-and-award spec.
+
+## Phase 3 gate: e2e and the demo story (S-15)
+
+The gate adds one spec that ties S-13 and S-14 into the kickoff story: the attrition alert is
+cleared by a release, and the RFP award is a commitment in budget-to-actuals with no
+attrition line on the ledger. 20/20 e2e on a production build. The demo script is
+`docs/DEMO.md`. Verdict on the producer-review features: attrition-as-decision **validated**;
+RFP normalization **validated**. No new money logic, so no new defects found.

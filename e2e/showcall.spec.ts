@@ -346,4 +346,22 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(line).toContainText('Summit Hospitality Group · compliance outstanding');
     });
   });
+
+  test.describe('Phase 3 gate (S-15)', () => {
+    test('the kickoff story: release the rooms (no exposure on the ledger), award the catering (a commitment on it)', async ({ page }) => {
+      // Half 1 (S-13 ran first): the alert is gone and the release is logged.
+      await page.goto('/');
+      await page.getByRole('link', { name: 'Northwind Fall Sales Kickoff' }).click();
+      await page.getByRole('link', { name: 'Rooms' }).click();
+      await expect(page.getByRole('region', { name: 'Attrition alerts' })).toContainText('No attrition decision is due.');
+
+      // Half 2 (S-14 ran second): the award is a commitment. Releasing rooms cost nothing,
+      // so the ledger carries the catering line and no attrition line.
+      await page.getByRole('link', { name: 'Budget' }).click();
+      const lines = page.getByRole('region', { name: 'Budget lines' });
+      await expect(lines.getByRole('row').filter({ hasText: 'Kickoff catering — Summit Hospitality Group' })).toContainText('Summit Hospitality Group');
+      await expect(lines.getByRole('row').filter({ hasText: 'Room-block attrition' })).toHaveCount(0);
+      await expect(page.getByRole('region', { name: 'Budget to actuals' }).getByRole('row').filter({ hasText: /^catering/ })).toContainText('$22,060.00');
+    });
+  });
 });
