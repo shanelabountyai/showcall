@@ -320,4 +320,30 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(block.getByRole('row').filter({ hasText: '80% by' })).toContainText('on pace');
     });
   });
+
+  test.describe('RFP normalization (S-14)', () => {
+    test('quotes compare like for like, the gap is named, and the award lands on the budget flagged', async ({ page }) => {
+      await page.goto('/');
+      await page.getByRole('link', { name: 'Northwind Fall Sales Kickoff' }).click();
+      await page.getByRole('link', { name: 'RFPs' }).click();
+      await expect(page.getByRole('region', { name: 'Registration' })).toContainText('260 registered');
+      const rfp = page.getByRole('region', { name: 'RFP Kickoff catering' });
+      const total = rfp.getByRole('row').filter({ hasText: 'Total' });
+      await expect(total).toContainText('$22,320.00');
+      await expect(total).toContainText('$18,210.00excludes Afternoon break');
+      await expect(total).toContainText('$22,060.00 — lowest complete');
+      await expect(rfp.getByRole('table', { name: 'Comparison' }).getByRole('row', { name: /^Afternoon break \(per head\) — gap/ })).toContainText('EXCLUDED');
+
+      await rfp.getByRole('button', { name: 'Award Summit Hospitality Group $22,060.00' }).click();
+      const contract = rfp.getByLabel('Contract');
+      await expect(contract).toContainText('Awarded to Summit Hospitality Group at $22,060.00');
+      await expect(contract).toContainText(/Compliance at award: certificate of insurance expires .*, before the show ends/);
+      await expect(rfp.getByRole('button', { name: /^Award / })).toHaveCount(0);
+
+      await page.getByRole('link', { name: 'Budget' }).click();
+      const line = page.getByRole('region', { name: 'Budget lines' }).getByRole('row').filter({ hasText: 'Kickoff catering — Summit Hospitality Group' });
+      await expect(line.getByLabel('Committed for Kickoff catering — Summit Hospitality Group (RFP award)')).toHaveValue('22060.00');
+      await expect(line).toContainText('Summit Hospitality Group · compliance outstanding');
+    });
+  });
 });

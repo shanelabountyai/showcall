@@ -526,3 +526,51 @@ decision in the hotel's own units (room-nights, by a date) is what makes the
 release option real rather than theoretical.
 Gate: 157 vitest tests; the budget and new attrition e2e specs pass against a
 production build.
+
+## RFP normalization (P0-6, S-14)
+
+Each category has a line-item schema, kept as data. Catering, for example, is
+breakfast, lunch and the afternoon break per head, service staff priced each,
+and linens and delivery flat. An RFP copies its category's schema when it
+opens. A quote is entered the way proposals are written: a base price, flat or
+per head, and then an answer for every line. The answer is *included* (covered
+by the base), *excluded* (a gap), or *extra* at a unit price. No line can be
+left blank, so silence is never mistaken for inclusion. The per-head quantity
+is the registration headcount, summed across attendee types and read at
+compare time, so the comparison moves when registration does.
+
+The comparison is one pure function, `compare()`. It produces each quote's
+normalized total, its cost per head, and the inclusion matrix, with gap rows
+and excluded cells highlighted. It also marks the *lowest complete* quote,
+which is never a quote with a gap. The seeded kickoff RFP shows why that
+matters. Harvest Table is cheapest at $18,210, because it leaves out the
+afternoon break. Summit Hospitality's flat $20,500 package, with the break
+extra at $6 a head, is the lowest complete quote at $22,060. Lakeshore's
+"$72 all-inclusive" comes to $22,320 once service staff are added.
+
+An award works like an attrition decision (D-020). It carries the total the
+producer saw, and it is refused if that total has moved. The award writes the
+budget commitment (through `addLine(…, tx)`) and a `Contract` record in one
+transaction, and the RFP then closes. A vendor whose papers lapse is flagged,
+not refused (D-021). The contract stores what compliance said at that moment
+("certificate of insurance expires Mon, Nov 2, before the show ends"), and the
+vendor's new budget line puts it on the S-12 worklist. The awarded quote's
+gaps are stored the same way, as "still to source".
+
+**Defects found.** None in the module. A backlog-editing script merged two
+table rows while marking S-14 done. It was caught by reading the diff before
+commit.
+
+**What it deliberately does not do.** It does not move the commitment when the
+headcount changes after award: a guarantee adjustment is a change order. It
+also does not handle per-attendee-type quantities, percentage lines (service
+charge, gratuity), or proposal PDFs (D-021).
+
+**Verdict.** The PRD's line was "what 'all-inclusive' actually includes, apples
+to apples." **Validated.** The three-answer normalization was enough to expose
+both classic traps in one seeded RFP: an all-inclusive price that was not
+all-inclusive, and a cheapest quote that was cheap by omission. Requiring an
+answer on every line did the most work, because it turns "they didn't mention
+it" into a visible gap instead of an assumption.
+Gate: 166 vitest tests; the full e2e spec (19) passes against a production
+build, including the new RFP compare-and-award spec.

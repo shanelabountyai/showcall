@@ -14,6 +14,7 @@ import { issueCallSheets } from '../src/callsheet/callsheet';
 import { addThreshold, createBlock, reserve } from '../src/attrition/attrition';
 import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
 import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
+import { addSchemaLine, createRfp, enterQuote, setQuantity, setRegistration } from '../src/rfp/rfp';
 import { sendDueReminders, setLeadDays } from '../src/chase/chase';
 import { DAY, fixedClock, systemClock } from '../src/clock';
 import { buildPackage } from '../src/content/distribution';
@@ -284,7 +285,36 @@ for (const name of ['Priya Castellanos', 'Jonah Whitfield']) {
 for (const s of await prisma.staff.findMany({ orderBy: { name: 'asc' }, take: 2 })) await reserve(hotelBlock.id, { kind: 'staff', staffId: s.id, ...stay(0, 2) }, onDay(-8));
 await reserve(hotelBlock.id, { kind: 'vip', guest: 'Northwind CEO', ...stay(0, 2) }, onDay(-5));
 
+// RFPs: line-item schemas as data, the kickoff's registration (260), and a
+// catering RFP with three quotes — the cheapest leaves the afternoon break
+// out, and the lowest complete one comes from a vendor whose COI lapses on
+// day 1, so awarding it is flagged. S-15 awards it.
+const SCHEMA = {
+  catering: [['Breakfast', 'per_head'], ['Lunch', 'per_head'], ['Afternoon break', 'per_head'], ['Service staff', 'each'], ['Linens', 'flat'], ['Delivery & setup', 'flat']],
+  av: [['Projectors', 'each'], ['LED wall', 'flat'], ['Audio package', 'flat'], ['Technicians', 'each'], ['Delivery & setup', 'flat']],
+  decor: [['Centerpieces', 'each'], ['Stage florals', 'flat'], ['Delivery & setup', 'flat']],
+} as const;
+for (const [category, lines] of Object.entries(SCHEMA)) for (const [label, basis] of lines) await addSchemaLine(category as keyof typeof SCHEMA, label, basis);
+for (const [type, registered, capacity] of [['Sales reps', 215, 250], ['Regional managers', 30, 30], ['Guests', 15, 20]] as const) await setRegistration(kickoff.id, type, registered, capacity);
+const rfp = await createRfp(kickoff.id, 'catering', 'Kickoff catering', onDay(-12));
+const rfpItems = await prisma.rfpItem.findMany({ where: { rfpId: rfp.id }, orderBy: { position: 'asc' } });
+await setQuantity(rfpItems.find((i) => i.label === 'Service staff')!.id, 12);
+const harvest = await addVendor('Harvest Table Co.');
+await recordDoc(harvest.id, 'coi', addDays(d1, -90), addDays(d1, 275));
+await recordDoc(harvest.id, 'w9', addDays(d1, -90), null);
+const summit = await addVendor('Summit Hospitality Group');
+await recordDoc(summit.id, 'coi', addDays(s1, -365), s1);
+await recordDoc(summit.id, 'w9', addDays(s1, -365), null);
+type Ans = Record<string, number | 'excluded'>; // a label maps to its extra cost in dollars, or is excluded; unlisted is included
+const quote = (vendorId: string, baseDollars: number, basePerHead: boolean, ans: Ans, day: number) => enterQuote(rfp.id, {
+  vendorId, baseCents: baseDollars * 100, basePerHead, receivedOn: addDays(d1, day),
+  lines: rfpItems.map((i) => { const a = ans[i.label]; return a == null ? { itemId: i.id, inclusion: 'included' as const } : a === 'excluded' ? { itemId: i.id, inclusion: a } : { itemId: i.id, inclusion: 'extra' as const, unitCents: a * 100 }; }),
+});
+await quote(vendor['Lakeshore Catering'].id, 72, true, { 'Service staff': 300 }, -8);
+await quote(harvest.id, 66, true, { 'Afternoon break': 'excluded', Linens: 450, 'Delivery & setup': 600 }, -6);
+await quote(summit.id, 20_500, false, { 'Afternoon break': 6 }, -4);
+
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
 console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags. /events/${event.id}/live`);
-console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due. /events/${kickoff.id}/rooms`);
+console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due, a catering RFP with three quotes. /events/${kickoff.id}/rooms`);
 await prisma.$disconnect();

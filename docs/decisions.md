@@ -440,3 +440,54 @@ Not done: cancellations (a reservation is deleted by hand for now, so a past
 threshold's pickup can shift), caps on how much can be released, partial
 releases (a producer releases the exact count or accepts), and paying for
 the rooms themselves on a master bill.
+
+## D-021 · 2026-09-23 · RFP normalization: a base price, three answers per line, and an award that records rather than refuses
+
+For S-14. None of these needed Shane's pick. Each follows from a rule already
+set, or is the default that is cheapest to reverse.
+
+**A quote is a base price plus answers.** The base is flat or per head, and
+it covers every line answered `included`. An `extra` line adds unit ×
+quantity. An `excluded` line is a gap, and the total leaves it out. This
+matches how the proposals read ("$72 per person, all-inclusive — service staff
+additional"), so entering one is transcription rather than arithmetic. Per-line
+prices for included items were the alternative. Vendors do not state them, so
+they would have been invented.
+
+**Every line must be answered.** A quote cannot be entered with a line left
+blank. A vendor who stayed silent on an item is recorded as `excluded` until
+they say otherwise. This removes an "unanswered" state from the matrix, and
+with it the question of whether silence means included.
+
+**Quantities derive.** A `per_head` line's quantity is the registration total,
+summed across attendee types and read at compare time. An `each` line's
+quantity is set on the RFP. A `flat` line's quantity is one. Nothing is stored
+that can go stale when registration moves.
+
+**"Lowest complete" skips any quote with a gap.** The cheapest quote on paper
+is often cheap because it leaves something out. The matrix highlights both the
+gap row and the excluded cell.
+
+**The schema is data, and an RFP copies it.** Editing `LineSchema` never
+rewrites an RFP that is already out to vendors. RFP lines cannot be added
+after creation, so every quote on an RFP answers the same list.
+
+**The award follows D-020's rule.** It carries the total the producer saw, and
+it is refused if that total has moved (a headcount change, a revised quote).
+The budget commitment and the `Contract` are written in one transaction
+through `addLine(…, tx)`, and each row is unique on the RFP, the quote and the
+budget line. After the award the RFP is closed: no quotes, no quantity edits.
+
+**Lapsed papers and gaps are recorded, not refused.** The award stores what
+`papersOutstanding()` said at that moment (the same rule the compliance
+worklist uses; `standing()` is shared) and the quote's gaps. Refusing would
+block a producer from signing the only caterer available. What D-018 asked for
+was that the award be *flagged*. Once the vendor has a budget line, it joins
+the compliance worklist on its own (D-019).
+
+**The contract status only moves forward:** awarded → sent → signed.
+
+Not done: a headcount change after the award does not move the commitment.
+Per-head guarantee adjustments are change orders (`updateLine`). Also not
+done: per-attendee-type quantities (catering for sales reps but not guests),
+percentage lines (service charge, gratuity), and attaching the vendor's PDF.

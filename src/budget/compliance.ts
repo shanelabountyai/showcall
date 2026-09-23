@@ -1,6 +1,6 @@
 import { cadenceStep, WARN_DAYS } from '../chase/chase';
 import type { Clock } from '../clock';
-import { prisma } from '../db';
+import { prisma, type Tx } from '../db';
 import type { ComplianceKind } from '../generated/prisma/enums';
 import { daysUntil, fromDbDate, localNow, shortDay, toDbDate, type LocalDate } from '../time';
 
@@ -30,6 +30,26 @@ export async function recordDoc(vendorId: string, kind: ComplianceKind, received
   if (kind === 'w9' && expiresOn) throw new ComplianceRefused('A W-9 does not expire');
   if (expiresOn && expiresOn <= receivedOn) throw new ComplianceRefused('That certificate expired before it was received');
   return prisma.complianceDoc.create({ data: { vendorId, kind, receivedOn: toDbDate(receivedOn), expiresOn: expiresOn && toDbDate(expiresOn) } });
+}
+
+/** One kind of paper against an event ending `end`. `docs` newest first: the latest received is the one in force. */
+function standing(docs: { kind: ComplianceKind; expiresOn: Date | null }[], kind: ComplianceKind, end: LocalDate) {
+  const doc = docs.find((d) => d.kind === kind);
+  const expiresOn = doc?.expiresOn ? fromDbDate(doc.expiresOn) : null;
+  // LocalDate is 'YYYY-MM-DD', so string order is date order. In force through the last show day is covered.
+  const reason = !doc ? 'missing' as const : expiresOn && expiresOn < end ? 'lapses' as const : null;
+  return { doc, expiresOn, reason };
+}
+
+/** What a vendor still owes in papers for this event, in words; empty when covered. The RFP award records this (D-018). */
+export async function papersOutstanding(vendorId: string, eventId: string, db: Tx = prisma) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  const docs = await db.complianceDoc.findMany({ where: { vendorId }, orderBy: [{ receivedOn: 'desc' }, { id: 'desc' }] });
+  return KINDS.flatMap((kind) => {
+    const { expiresOn, reason } = standing(docs, kind, fromDbDate(event.endDate));
+    return reason === 'missing' ? [`no ${KIND_LABEL[kind]} on file`]
+      : reason === 'lapses' ? [`${KIND_LABEL[kind]} expires ${shortDay(expiresOn!)}, before the show ends`] : [];
+  });
 }
 
 export type ComplianceState = 'ok' | 'overdue' | 'due' | 'open';
@@ -64,10 +84,7 @@ export async function complianceBoard(eventId: string, clock: Clock) {
   const end = fromDbDate(event.endDate);
 
   const rows = vendors.flatMap((v) => KINDS.map((kind): ComplianceRow => {
-    const doc = v.docs.find((d) => d.kind === kind);
-    const expiresOn = doc?.expiresOn ? fromDbDate(doc.expiresOn) : null;
-    // LocalDate is 'YYYY-MM-DD', so string order is date order. In force through the last show day is covered.
-    const reason = !doc ? 'missing' : expiresOn && expiresOn < end ? 'lapses' : null;
+    const { doc, expiresOn, reason } = standing(v.docs, kind, end);
     const dueDay = reason === 'missing' ? start : reason === 'lapses' ? expiresOn : null;
     const daysLeft = dueDay ? daysUntil(today, dueDay) : null;
     const state: ComplianceState = daysLeft == null ? 'ok' : daysLeft < 0 ? 'overdue' : daysLeft <= WARN_DAYS ? 'due' : 'open';

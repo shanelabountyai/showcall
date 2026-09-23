@@ -44,6 +44,8 @@ model Event {
   snapshots       BudgetSnapshot[]
   nags            ComplianceReminder[]
   blocks          RoomBlock[]
+  registrations   Registration[]
+  rfps            Rfp[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int                   @default(0)
 }
@@ -502,6 +504,7 @@ model Vendor {
   lines  BudgetLine[]
   nags   ComplianceReminder[]
   blocks RoomBlock[]
+  quotes Quote[]
 }
 
 enum ComplianceKind {
@@ -566,6 +569,7 @@ model BudgetLine {
   vendor         Vendor?            @relation(fields: [vendorId], references: [id])
   vendorId       String?
   attrition      AttritionDecision?
+  contract       Contract?
 
   @@index([eventId])
 }
@@ -689,4 +693,127 @@ model BlockRelease {
   night      BlockNight        @relation(fields: [nightId], references: [id])
   nightId    String
   rooms      Int
+}
+
+// ── RFP normalization (P0-6, D-021) ─────────────────────────────────────────
+
+/// Registration headcount by attendee type against capacity (P0-8). Working
+/// state: counts move as people register. Their sum is the per-head quantity.
+model Registration {
+  id           String @id @default(cuid())
+  event        Event  @relation(fields: [eventId], references: [id])
+  eventId      String
+  attendeeType String
+  registered   Int
+  capacity     Int
+
+  @@unique([eventId, attendeeType])
+}
+
+/// How a line's quantity is found: the headcount, a count on the RFP, or one.
+enum LineBasis {
+  per_head
+  each
+  flat
+}
+
+/// The line-item schema per category, as data. An RFP copies it at creation,
+/// so editing the schema never rewrites an RFP already out to vendors.
+model LineSchema {
+  id       String         @id @default(cuid())
+  category BudgetCategory
+  label    String
+  basis    LineBasis
+  position Int
+
+  @@unique([category, label])
+}
+
+model Rfp {
+  id        String         @id @default(cuid())
+  event     Event          @relation(fields: [eventId], references: [id])
+  eventId   String
+  category  BudgetCategory
+  title     String
+  createdAt DateTime
+  items     RfpItem[]
+  quotes    Quote[]
+  contract  Contract?
+}
+
+model RfpItem {
+  id       String      @id @default(cuid())
+  rfp      Rfp         @relation(fields: [rfpId], references: [id])
+  rfpId    String
+  label    String
+  basis    LineBasis
+  /// Set for `each` lines only.
+  quantity Int?
+  position Int
+  answers  QuoteLine[]
+
+  @@unique([rfpId, label])
+}
+
+enum Inclusion {
+  included
+  excluded
+  extra
+}
+
+/// A vendor's answer, normalized: a base price that covers every `included`
+/// line, plus each `extra` line at unit × quantity. `excluded` is a gap.
+model Quote {
+  id          String      @id @default(cuid())
+  rfp         Rfp         @relation(fields: [rfpId], references: [id])
+  rfpId       String
+  vendor      Vendor      @relation(fields: [vendorId], references: [id])
+  vendorId    String
+  baseCents   Int
+  basePerHead Boolean
+  receivedOn  DateTime    @db.Date
+  lines       QuoteLine[]
+  contract    Contract?
+
+  @@unique([rfpId, vendorId])
+}
+
+model QuoteLine {
+  id        String    @id @default(cuid())
+  quote     Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId   String
+  item      RfpItem   @relation(fields: [itemId], references: [id])
+  itemId    String
+  inclusion Inclusion
+  /// Set for `extra` lines only.
+  unitCents Int?
+
+  @@unique([quoteId, itemId])
+}
+
+enum ContractStatus {
+  awarded
+  sent
+  signed
+}
+
+/// The award: one per RFP, landing as a budget commitment in the same
+/// transaction. What was outstanding at that moment is recorded, not re-derived.
+model Contract {
+  id             String         @id @default(cuid())
+  rfp            Rfp            @relation(fields: [rfpId], references: [id])
+  rfpId          String         @unique
+  quote          Quote          @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quoteId        String         @unique
+  budgetLine     BudgetLine     @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
+  budgetLineId   String         @unique
+  committedCents Int
+  headcount      Int
+  /// Compliance papers outstanding at award, e.g. "certificate of insurance expires Mon, Nov 2, before the show ends".
+  papers         String[]
+  /// Lines the awarded quote excludes — still to source elsewhere.
+  gaps           String[]
+  status         ContractStatus @default(awarded)
+  awardedAt      DateTime
+  statusAt       DateTime
 }
