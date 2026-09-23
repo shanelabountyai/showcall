@@ -582,3 +582,35 @@ cleared by a release, and the RFP award is a commitment in budget-to-actuals wit
 attrition line on the ledger. 20/20 e2e on a production build. The demo script is
 `docs/DEMO.md`. Verdict on the producer-review features: attrition-as-decision **validated**;
 RFP normalization **validated**. No new money logic, so no new defects found.
+
+## Contingency plans as data (P0-7 part 1, S-16)
+
+A contingency plan is a record: a title, the trigger criteria as the producer
+would say them on a call, a decision owner, a decide-by, and two or more
+branches. Each branch carries the cascade it would set off: a run-sheet
+variant (cue edits, including a room move), notices to named vendors, and a
+cost delta with its budget category and vendor. The seeded rain call reads:
+decide by 10:00 on day 2 (Morgan Ellis). If it is dry, hold on the terrace.
+If it rains, move the reception into Ballroom A at 17:30, tell the caterer,
+the florist and AV, and $3,800 lands on production.
+
+The decide-by is itself a run-sheet cue, anchored to the reception, so moving
+the reception moves the deadline. There is no second clock to drift (D-022).
+Plan state is derived from the injected clock on every read. An unmade call
+at its deadline escalates once to the owner and the producers, through an
+append-only outbox keyed by the deadline itself. The chase dashboard carries
+a line for any call past its decide-by.
+
+**Defects found.** None in the code. One in the seed, before it shipped: a
+"hold the keynote 10 minutes" branch was drafted as a cue edit, but holding a
+keynote is an agenda change, so the branch would have claimed a cascade it
+could not execute. It became a doors hold, which a cue edit can express, and
+the limit is recorded in D-022.
+
+**What it deliberately does not do.** Execution (S-17), creating plans from
+the UI, and branches that save money or change the agenda (D-022).
+
+**Verdict.** Pending S-17. Producer review asked for decision trees that
+execute, and only half of that exists yet.
+Gate: 171 vitest tests; the new contingency e2e spec runs against a production build.
+

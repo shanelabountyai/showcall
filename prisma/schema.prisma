@@ -46,6 +46,7 @@ model Event {
   blocks          RoomBlock[]
   registrations   Registration[]
   rfps            Rfp[]
+  plans           ContingencyPlan[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int                   @default(0)
 }
@@ -173,26 +174,27 @@ enum Edge {
 /// anchored to a session or another cue's edge plus an offset, and derives
 /// from there (src/runsheet/cues.ts). Shape rules live in the migration.
 model Cue {
-  id             String    @id @default(cuid())
+  id             String           @id @default(cuid())
   label          String
   durationMin    Int
-  day            DateTime? @db.Date
+  day            DateTime?        @db.Date
   startMin       Int?
   /// A session id from the agenda snapshot, or a cue id. No foreign key:
   /// sessions are referenced as published, and a vanished anchor is a
   /// problem the cascade names rather than a row the database deletes.
   anchorId       String?
   anchorEdge     Edge?
-  offsetMin      Int       @default(0)
+  offsetMin      Int              @default(0)
   /// Optional "must end by" — the cue's slack is measured against it.
   endById        String?
   endByEdge      Edge?
-  endByOffsetMin Int       @default(0)
-  event          Event     @relation(fields: [eventId], references: [id])
+  endByOffsetMin Int              @default(0)
+  event          Event            @relation(fields: [eventId], references: [id])
   eventId        String
-  room           Room      @relation(fields: [roomId], references: [id])
+  room           Room             @relation(fields: [roomId], references: [id])
   roomId         String
   roles          CueRole[]
+  plan           ContingencyPlan?
 
   @@index([eventId])
 }
@@ -271,6 +273,7 @@ model Staff {
   assignments      Assignment[]
   marks            LiveMark[]
   rooms            RoomReservation[]
+  plans            ContingencyPlan[]
 }
 
 enum DayRole {
@@ -498,13 +501,15 @@ model Reminder {
 /// A company Showcall buys from. House-wide, like Staff: one caterer across
 /// every event, one COI on file for all of them.
 model Vendor {
-  id     String               @id @default(cuid())
-  name   String               @unique
-  docs   ComplianceDoc[]
-  lines  BudgetLine[]
-  nags   ComplianceReminder[]
-  blocks RoomBlock[]
-  quotes Quote[]
+  id      String               @id @default(cuid())
+  name    String               @unique
+  docs    ComplianceDoc[]
+  lines   BudgetLine[]
+  nags    ComplianceReminder[]
+  blocks  RoomBlock[]
+  quotes  Quote[]
+  notices ContingencyNotice[]
+  costs   ContingencyBranch[]
 }
 
 enum ComplianceKind {
@@ -816,4 +821,80 @@ model Contract {
   status         ContractStatus @default(awarded)
   awardedAt      DateTime
   statusAt       DateTime
+}
+
+/// A contingency plan (P0-7, D-022): what would trigger it, who calls it and by
+/// when. The decide-by is a run-sheet cue, so it derives like any other
+/// (D-006): anchored to the reception, it moves with the reception.
+model ContingencyPlan {
+  id            String                  @id @default(cuid())
+  title         String
+  /// The criteria, as the producer would say them on a call.
+  trigger       String
+  event         Event                   @relation(fields: [eventId], references: [id])
+  eventId       String
+  owner         Staff                   @relation(fields: [ownerId], references: [id])
+  ownerId       String
+  decideBy      Cue                     @relation(fields: [decideByCueId], references: [id])
+  decideByCueId String                  @unique
+  branches      ContingencyBranch[]
+  decision      ContingencyDecision?
+  escalations   ContingencyEscalation[]
+
+  @@unique([eventId, title])
+}
+
+/// One way the call can go, and the cascade it implies. Executed in S-17.
+model ContingencyBranch {
+  id             String                @id @default(cuid())
+  label          String
+  /// The run-sheet variant: cue edits in the cascade's shape (BranchEdit[]).
+  cueEdits       Json
+  /// Non-negative: it posts to the budget as a committed line (D-022).
+  costDeltaCents Int                   @default(0)
+  costCategory   BudgetCategory        @default(other)
+  costVendor     Vendor?               @relation(fields: [costVendorId], references: [id])
+  costVendorId   String?
+  plan           ContingencyPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId         String
+  notices        ContingencyNotice[]
+  decisions      ContingencyDecision[]
+
+  @@unique([planId, label])
+}
+
+/// What a vendor is told if this branch is taken.
+model ContingencyNotice {
+  id       String            @id @default(cuid())
+  body     String
+  branch   ContingencyBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId String
+  vendor   Vendor            @relation(fields: [vendorId], references: [id])
+  vendorId String
+}
+
+/// The call, once made. Append-only (trigger); one per plan. Written by S-17.
+model ContingencyDecision {
+  id        String            @id @default(cuid())
+  decidedAt DateTime
+  plan      ContingencyPlan   @relation(fields: [planId], references: [id])
+  planId    String            @unique
+  branch    ContingencyBranch @relation(fields: [branchId], references: [id])
+  branchId  String
+}
+
+/// The escalation outbox: an unmade decision at its decide-by. Append-only.
+/// The deadline is in the unique key, so a decide-by that moves later starts
+/// afresh, and one deadline escalates once however often the sweep runs.
+model ContingencyEscalation {
+  id     String          @id @default(cuid())
+  plan   ContingencyPlan @relation(fields: [planId], references: [id])
+  planId String
+  day    DateTime        @db.Date
+  minute Int
+  to     String
+  body   String
+  sentAt DateTime
+
+  @@unique([planId, day, minute])
 }

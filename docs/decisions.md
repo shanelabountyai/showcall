@@ -491,3 +491,55 @@ Not done: a headcount change after the award does not move the commitment.
 Per-head guarantee adjustments are change orders (`updateLine`). Also not
 done: per-attendee-type quantities (catering for sales reps but not guests),
 percentage lines (service charge, gratuity), and attaching the vendor's PDF.
+
+## D-022 · 2026-09-23 · Contingency plans: the decide-by is a cue, escalation is keyed by the deadline
+
+No picks were needed from Shane for S-16. Each choice follows from a rule
+already set, and is recorded because each one had a tempting wrong answer.
+
+**The decide-by is a run-sheet cue, not a timestamp column.** A plan owns
+exactly one cue (`decideByCueId`, unique), labelled `Decide: <title>`, zero
+minutes long, fixed or anchored like any other (D-006). So "call it 7 hours
+before the reception" moves with the reception, and the PRD's "decide-by
+times enter the run sheet as cues" is literally true: the cue is in the run
+sheet, and the live console shows it. The plan and its cue are written in one
+transaction (`insertCue(tx, …)`), and a decide-by that breaks the run sheet
+is refused with the plan. The cue is tagged to no role, so it never reaches a
+call sheet (hard rule 7).
+
+**State is derived on read; the only write is the escalation outbox.**
+`open` → `due` inside `WARN_MIN = 60` → `overdue` at the decide-by →
+`decided` once a `ContingencyDecision` exists. The escalation's unique key is
+`(planId, day, minute)`, meaning the deadline itself. One deadline escalates
+once however often the sweep runs, and a decide-by that moves later owes a
+fresh escalation at its new time. This is the same move as the chase cadence
+(D-017) and compliance (D-019). It goes to the owner and every producer on
+the event, deduplicated.
+
+**The sweep is a route for a scheduler, not a side effect of a page.**
+`/api/cron/escalate` runs `escalateAll`, and `vercel.json` schedules it each
+minute. Nothing is deployed, so locally the dashboard state is exact but the
+outbox row appears only when the sweep runs (the seed runs it once, and so
+could a `curl`). Writing on page render was the tempting shortcut. D-017 kept
+send out of GETs on purpose.
+
+**A branch is data in the cascade's own shape.** `cueEdits` is `CueEdit[]`
+plus an optional `roomId`, because a rain call is a room move. The cascade
+does not take `roomId` yet, and `diffTimings` does not see a room change. S-17
+adds both, since an unseen room move would slip past the preview-equals-commit
+check. Cue and room references are checked at creation. Whether the variant
+still applies cleanly is S-17's preview, at execution time, against the sheet
+as it is then.
+
+**A cost delta is non-negative (check constraint).** It posts as a committed
+line through `addLine` (D-018), and lines cannot be negative. A branch that
+saves money, such as cancelling a tent, is not expressible yet. Add it as a
+change to an existing line if a producer asks.
+
+**A decision is one per plan, of that plan's own branch** (composite foreign
+key), and append-only. S-16 creates the table so that "unmade" is a real
+query. S-17 writes it.
+
+Not done: creating plans from the UI (the seed and `createPlan` only), and
+branches that change the agenda. "Hold the keynote 10 minutes" is a publish,
+not a cue edit, so a branch cannot express it.

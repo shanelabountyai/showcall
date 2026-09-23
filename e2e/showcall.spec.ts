@@ -364,4 +364,19 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(page.getByRole('region', { name: 'Budget to actuals' }).getByRole('row').filter({ hasText: /^catering/ })).toContainText('$22,060.00');
     });
   });
+
+  test.describe('contingency plans (S-16)', () => {
+    test('the rain call shows its decide-by, both branches and what each would tell vendors', async ({ page }) => {
+      await page.goto(`/events/${eventId}/chase`);
+      await page.getByRole('link', { name: 'Contingency', exact: true }).click();
+      const rain = page.getByRole('region', { name: 'Rain call: closing reception' });
+      await expect(rain.getByRole('heading')).toContainText('open');
+      await expect(rain).toContainText(/Decide by 10:00 .* owner Morgan Ellis/);
+      const branch = (label: string) => rain.getByRole('row').filter({ hasText: label });
+      await expect(branch('Dry: hold on the terrace')).toContainText('as planned');
+      await expect(branch('Rain: move to Ballroom A')).toContainText('Closing reception');
+      await expect(branch('Rain: move to Ballroom A')).toContainText('Lakeshore Catering: Reception service moves to Ballroom A');
+      await expect(branch('Rain: move to Ballroom A')).toContainText('$3,800.00 production (Brightline AV)');
+    });
+  });
 });

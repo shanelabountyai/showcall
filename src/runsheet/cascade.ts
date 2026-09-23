@@ -96,15 +96,17 @@ export const previewCascade = (eventId: string, change: Change) => applyChange(e
 export const commitCascade = (eventId: string, change: Change, expected: Moved[]) => applyChange(eventId, change, expected);
 
 /** Add a production cue. Refused, and not written, if the sheet then has any problem. */
-export async function addCue(eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) {
-  return prisma.$transaction(async (tx) => {
-    const pinned = await lockEvent(tx, eventId);
-    await tx.room.findFirstOrThrow({ where: { id: roomId, eventId } });
-    const cue = await tx.cue.create({ data: { eventId, roomId, ...spec, day: dbDay(spec.day) } });
-    const { problems } = await resolveAt(tx, eventId, pinned);
-    if (problems.length) throw new CascadeBlocked(problems);
-    return cue;
-  });
+export const addCue = (eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) =>
+  prisma.$transaction((tx) => insertCue(tx, eventId, roomId, spec));
+
+/** `addCue` inside a caller's transaction, so a cue and the row that owns it land together. */
+export async function insertCue(tx: Tx, eventId: string, roomId: string, spec: Omit<CueSpec, 'id'>) {
+  const pinned = await lockEvent(tx, eventId);
+  await tx.room.findFirstOrThrow({ where: { id: roomId, eventId } });
+  const cue = await tx.cue.create({ data: { eventId, roomId, ...spec, day: dbDay(spec.day) } });
+  const { problems } = await resolveAt(tx, eventId, pinned);
+  if (problems.length) throw new CascadeBlocked(problems);
+  return cue;
 }
 
 export type RunSheetRow = { id: string; kind: 'session' | 'cue'; label: string; room: string; day: string; startMin: number; endMin: number; slack?: number };

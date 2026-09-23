@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { chaseBoard, ChaseRefused, outbox, sendDueReminders, setLeadDays, stalePackages, type ChaseState } from '@/src/chase/chase';
 import { systemClock } from '@/src/clock';
+import { contingencyBoard } from '@/src/contingency/contingency';
 import { prisma } from '@/src/db';
 import { DeliverableKind } from '@/src/generated/prisma/enums';
 import { shortDay } from '@/src/time';
@@ -30,11 +31,13 @@ export default async function Chase({ params, searchParams }: { params: Promise<
   const board = await chaseBoard(eventId, systemClock).catch(() => null);
   if (!board) notFound();
   const here = `/events/${eventId}/chase`;
-  const [policies, sentList, stale] = await Promise.all([
+  const [policies, sentList, stale, contingency] = await Promise.all([
     prisma.deadlinePolicy.findMany({ where: { eventId }, orderBy: { kind: 'asc' } }),
     outbox(eventId),
     stalePackages(eventId),
+    contingencyBoard(eventId, systemClock),
   ]);
+  const calls = contingency.plans.filter((p) => p.state === 'overdue');
   const owed = board.rows.filter((r) => r.owed != null).length;
   const worklist = board.rows.filter((r) => r.state !== 'locked');
 
@@ -64,6 +67,7 @@ export default async function Chase({ params, searchParams }: { params: Promise<
 
       <section aria-label="Escalation worklist">
         <h2>Escalation worklist</h2>
+        {calls.length > 0 && <p role="alert"><a href={`/events/${eventId}/contingency`}>{calls.length} contingency call(s) past decide-by</a>: {calls.map((p) => p.title).join(', ')}</p>}
         <form action={doSend}>
           <button type="submit" disabled={owed === 0}>Send due reminders ({owed})</button>
         </form>

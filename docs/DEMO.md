@@ -21,6 +21,16 @@ Open http://localhost:4000. Two events are seeded: **Northwind Leadership Summit
 | 4. Award | **Award Summit Hospitality Group $22,060.00** | "The award records rather than refuses. Its COI lapses on day 1, so the contract carries the compliance flag." |
 | 5. Ledger | **Budget** | "The award is a commitment in budget-to-actuals, still flagged 'compliance outstanding'. No attrition line: releasing rooms cost nothing." |
 
+## Phase 4 preview — "the calls nobody made" (Summit event, ~1 min)
+
+S-17 adds execution. For now the story is the plan and its deadline.
+
+| Stop | Click | Say |
+|---|---|---|
+| 1. Overdue call | Northwind Leadership Summit → **Chase** | "Above the worklist: a contingency call is past its decide-by. The doors-hold decision was due at 8:25 and nobody made it." (Only after 8:25 Chicago time; before that, it's still open.) |
+| 2. The plans | **Contingency** | "The rain call is due at 10:00 tomorrow, seven hours before the reception, and anchored to it. Move the reception and the deadline moves too. Each branch says what it would change, who gets told, and what it costs." |
+| 3. Escalation | Scroll to **Escalation outbox** | "The unmade doors call went out once, to its owner and the producer. The deadline is the key, so it can't go out twice." |
+
 ## Troubleshooting
 
 | Symptom | Fix |

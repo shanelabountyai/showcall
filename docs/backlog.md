@@ -50,7 +50,7 @@ See D-012 for the reasoning kept out of this table; D-017 for S-10's.
 
 | ID | Item | Status |
 |---|---|---|
-| S-16 | Contingency plans as data (P0-7, part 1): trigger criteria, decide-by time, owner, branches each carrying a cascade (run-sheet variant, vendor notifications, cost delta); the decide-by enters the run sheet as a cue; an unmade decision escalates at its deadline (outbox + dashboard) | ⬜ |
+| S-16 | Contingency plans as data (P0-7, part 1): trigger criteria, decide-by time, owner, branches each carrying a cascade (run-sheet variant, vendor notifications, cost delta); the decide-by enters the run sheet as a cue; an unmade decision escalates at its deadline (outbox + dashboard) | ✅ |
 | S-17 | Branch execution (P0-7, part 2): execute → preview → atomic commit through the existing cascade; the branch that was not taken is archived with the decision log; cost delta posts to the budget; the rain-call fixture swaps the variant and re-issues **exactly** the affected call sheets | ⬜ |
 | S-18 | Venue profiles (P0-8 rest): dock, power, rigging, ceiling, wifi, union house rules as structured data; load-in / load-out slots planned against them as production cues | ⬜ |
 | S-19 | Phase 4 gate — the capstone: e2e on a production build, the PRD's five-minute story (v7 after lock, keynote moves 15 min, rain call executes at its decide-by cue) | ⬜ |

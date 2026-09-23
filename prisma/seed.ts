@@ -16,6 +16,7 @@ import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
 import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
 import { addSchemaLine, createRfp, enterQuote, setQuantity, setRegistration } from '../src/rfp/rfp';
 import { sendDueReminders, setLeadDays } from '../src/chase/chase';
+import { createPlan, escalateDue } from '../src/contingency/contingency';
 import { DAY, fixedClock, systemClock } from '../src/clock';
 import { buildPackage } from '../src/content/distribution';
 import { approve } from '../src/content/lock';
@@ -38,8 +39,8 @@ const today = localNow(systemClock.now(), TZ);
 const [d1, d2] = daysBetween(today.day, fromDbDate(new Date(toDbDate(today.day).getTime() + 86_400_000))) as [string, string];
 
 const event = await createEvent({ name: 'Northwind Leadership Summit', clientName: 'Northwind Health Partners', timezone: TZ, startDate: d1, endDate: d2 });
-const room = {} as Record<'Ballroom A' | 'Salon B' | 'Salon C', { id: string }>;
-for (const [name, strikeMinutes, resetMinutes] of [['Ballroom A', 5, 10], ['Salon B', 5, 5], ['Salon C', 5, 5]] as const) {
+const room = {} as Record<'Ballroom A' | 'Salon B' | 'Salon C' | 'Lakeview Terrace', { id: string }>;
+for (const [name, strikeMinutes, resetMinutes] of [['Ballroom A', 5, 10], ['Salon B', 5, 5], ['Salon C', 5, 5], ['Lakeview Terrace', 5, 5]] as const) {
   room[name] = await prisma.room.create({ data: { eventId: event.id, name, strikeMinutes, resetMinutes } });
 }
 
@@ -180,9 +181,10 @@ async function cue(r: keyof typeof room, label: string, durationMin: number, spe
   await prisma.cueRole.createMany({ data: tags.map((t) => ({ cueId: c.id, roleId: roles[t].id })) });
   return c;
 }
+const doors: Record<string, string> = {};
 for (const day of [d1, d2]) {
   const keynote = session[`${day} Ballroom A ${at(9)}`]!;
-  await cue('Ballroom A', 'Doors open', 30, { anchorId: keynote, anchorEdge: 'start', offsetMin: -30 }, ['Doors & Registration']);
+  doors[day] = (await cue('Ballroom A', 'Doors open', 30, { anchorId: keynote, anchorEdge: 'start', offsetMin: -30 }, ['Doors & Registration'])).id;
   await cue('Ballroom A', 'Walk-in music', 15, { anchorId: keynote, anchorEdge: 'start', offsetMin: -15 }, ['A1 Audio']);
   await cue('Ballroom A', 'Lectern mic swap', 5, { anchorId: keynote, anchorEdge: 'end' }, ['A1 Audio']);
   await cue('Ballroom A', 'Lunch service', 60, { day, startMin: at(12, 20) }, ['Catering']);
@@ -193,6 +195,8 @@ for (const day of [d1, d2]) {
   await cue('Salon B', 'Panel mics set', 10, { anchorId: session[`${day} Salon B ${at(13, 30)}`], anchorEdge: 'start', offsetMin: -10 }, ['A1 Audio']);
   await cue('Salon C', 'Afternoon coffee', 30, { anchorId: session[`${day} Salon C ${at(14, 30)}`], anchorEdge: 'end' }, ['Catering']);
 }
+// The closing reception is outdoors, which is what the rain call (below) is about.
+const reception = await cue('Lakeview Terrace', 'Closing reception', 90, { day: d2, startMin: at(17) }, ['Catering', 'Doors & Registration']);
 await issueCallSheets(event.id, systemClock);
 
 // A chase pass a month ago, so the outbox has history and today's board still
@@ -215,11 +219,24 @@ const crew: [string, number, 'producer' | 'stage_manager' | 'technical_director'
   ['Avery Holt', 480, 'crew', null, at(8), at(16)],
 ];
 const sm: Record<string, string> = {};
+const staffId: Record<string, string> = {};
 for (const [name, maxMinutesPerDay, role, r, startMin, endMin] of crew) {
   const person = await prisma.staff.create({ data: { name, maxMinutesPerDay } });
   for (const day of [d1, d2]) await assign({ staffId: person.id, eventId: event.id, roomId: r && room[r].id, day, startMin, endMin, role });
   if (role === 'stage_manager') sm[r!] = person.id;
+  staffId[name] = person.id;
 }
+
+// A call due before today's keynote, so a demo run later in the day shows it
+// overdue and escalated; made before the GO marks so it is called like any row.
+await createPlan(event.id, {
+  title: 'Doors hold, day 1', trigger: 'Security sweep of Ballroom A not signed off by 8:25', ownerId: staffId['Priya Natarajan']!,
+  decideBy: { roomId: room['Ballroom A'].id, day: null, startMin: null, anchorId: doors[d1]!, anchorEdge: 'start', offsetMin: -5 },
+  branches: [
+    { label: 'Open on time', cueEdits: [] },
+    { label: 'Hold doors 10 minutes', cueEdits: [{ cueId: doors[d1]!, offsetMin: -20, durationMin: 20 }] },
+  ],
+});
 
 // GO marks for today: every row already due, called by its room's SM, drifting later through the day.
 const now = localNow(systemClock.now(), TZ);
@@ -258,6 +275,26 @@ await line('talent', 'Keynote honoraria', 25_000);
 await takeSnapshot(event.id, 'Client-approved v1', fixedClock(new Date(systemClock.now().getTime() - 21 * DAY)));
 await updateLine(led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); // change order: second IMAG camera; deposit invoiced
 await updateLine(lunch.id, { actualCents: 15_120_00 });
+// The rain call: due 10:00 on day 2, anchored to the reception, so moving the
+// reception moves the deadline. S-17 executes it; the rain branch moves the
+// reception into Ballroom A after the closer and re-issues only the sheets it touches.
+await createPlan(event.id, {
+  title: 'Rain call: closing reception', trigger: 'NWS forecast ≥ 40% chance of rain 17:00–19:00, or lightning within 10 miles', ownerId: staffId['Morgan Ellis']!,
+  decideBy: { roomId: room['Lakeview Terrace'].id, day: null, startMin: null, anchorId: reception.id, anchorEdge: 'start', offsetMin: -420 },
+  branches: [
+    { label: 'Dry: hold on the terrace', cueEdits: [] },
+    {
+      label: 'Rain: move to Ballroom A', cueEdits: [{ cueId: reception.id, roomId: room['Ballroom A'].id, startMin: at(17, 30) }],
+      costDeltaCents: 3_800_00, costCategory: 'production', costVendorId: vendor['Brightline AV'].id,
+      notices: [
+        { vendorId: vendor['Lakeshore Catering'].id, body: 'Reception service moves to Ballroom A at 17:30; bars set by 17:15.' },
+        { vendorId: vendor['Petal & Stem'].id, body: 'Terrace florals move to the Ballroom A cocktail rounds.' },
+        { vendorId: vendor['Brightline AV'].id, body: 'Flip Ballroom A to reception audio after the closer: two wireless, background music.' },
+      ],
+    },
+  ],
+});
+const escalations = await escalateDue(event.id, systemClock);
 const nags = await sendComplianceNags(event.id, fixedClock(new Date(systemClock.now().getTime() - 10 * DAY))).catch(() => 0);
 
 // A second event, 40 days out, so the room block has a decision coming due:
@@ -315,6 +352,6 @@ await quote(harvest.id, 66, true, { 'Afternoon break': 'excluded', Linens: 450, 
 await quote(summit.id, 20_500, false, { 'Afternoon break': 6 }, -4);
 
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
-console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags. /events/${event.id}/live`);
+console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags, ${escalations} escalations. /events/${event.id}/live`);
 console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due, a catering RFP with three quotes. /events/${kickoff.id}/rooms`);
 await prisma.$disconnect();
