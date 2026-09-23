@@ -392,3 +392,51 @@ total.
 **Dollars are parsed to cents without a float.** `parseCents()` splits the
 typed string on the decimal point and does integer arithmetic. `"12.345"` is
 refused by name, not rounded.
+
+## D-020 · 2026-09-23 · Attrition: thresholds net, decisions execute exactly what was framed
+
+Shane's pick, for S-13: **a later threshold nets what earlier ones already
+put on the budget.** Each threshold shows its full shortfall. An accept posts
+only the part not yet accepted, so the budget carries the worst shortfall
+accepted and never the sum. The alternatives were independent penalties,
+which double-count the same unsold room-nights, and billing only the final
+threshold, which turns earlier dates into review dates. The rest follows
+from rules already set:
+
+**Nothing is stored that can be derived.** Pickup, projection, shortfall and
+the release count are computed on read from the contract nights, the
+reservations (each dated `bookedOn`) and the decision log (`assess()`, pure).
+A passed threshold is judged as of its own date. Bookings and releases after
+that date do not rewrite it.
+
+**The projection is the average pace so far,** carried to the threshold or
+the cutoff, whichever comes first, and rounded down. "80%" rounds the
+requirement up. Both roundings lean toward raising the alert. An alert means
+an open shortfall inside `ALERT_DAYS = 14`. Beyond that window it is a
+*watch*. The alert shows on the rooms page and does not go to the outbox:
+its audience is the producer, not a vendor.
+
+**The release it asks for is exact.** The count is `contracted −
+floor(100 × (projected + accepted) / percent)`, the smallest release that
+clears the open shortfall, and a fixture proves that one fewer does not.
+Releases come off the emptiest nights first. A release is a logged decision
+(`AttritionDecision` plus per-night `BlockRelease` rows, both append-only)
+and never an edit to the contracted nights.
+
+**A decision carries the figure the producer saw.** It is refused if the
+numbers have moved since the page was rendered. Nobody signs off on an amount
+they did not see. An accept posts a `travel` line against the hotel (a
+`Vendor`) in the same transaction as the decision, through `addLine(…, tx)`,
+and a check constraint ties every accept to its line. Every write locks the
+block row, because inventory and netting are both read-then-write.
+
+**The cutoff returns unsold rooms to the hotel.** After it, nothing books and
+nothing releases, and attrition is still owed on the contracted block,
+because that is how the contracts read. Speaker, staff and VIP rooms are
+reservations like any other. They link their person (check constraint) and
+count toward pickup.
+
+Not done: cancellations (a reservation is deleted by hand for now, so a past
+threshold's pickup can shift), caps on how much can be released, partial
+releases (a producer releases the exact count or accepts), and paying for
+the rooms themselves on a master bill.

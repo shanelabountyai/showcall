@@ -304,4 +304,20 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await expect(led).not.toContainText('compliance outstanding');
     });
   });
+
+  test.describe('room-block attrition (S-13)', () => {
+    test('the D-30 alert is framed as a decision; releasing clears it and is logged', async ({ page }) => {
+      await page.goto('/');
+      await page.getByRole('link', { name: 'Northwind Fall Sales Kickoff' }).click();
+      await page.getByRole('link', { name: 'Rooms' }).click();
+      const alerts = page.getByRole('region', { name: 'Attrition alerts' });
+      await expect(alerts).toContainText(/80% by .*: Release 24 room-nights by .* or accept \$4,541\.00 \(19 room-nights short\)/);
+
+      await alerts.getByRole('button', { name: 'Release 24' }).click();
+      await expect(alerts).toContainText('No attrition decision is due.');
+      const block = page.getByRole('region', { name: 'Block at Lakeview Grand Hotel' });
+      await expect(block).toContainText('released 24 room-nights');
+      await expect(block.getByRole('row').filter({ hasText: '80% by' })).toContainText('on pace');
+    });
+  });
 });

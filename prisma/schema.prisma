@@ -20,40 +20,41 @@ model Client {
 }
 
 model Event {
-  id        String          @id @default(cuid())
-  name      String
-  timezone  String
-  startDate DateTime        @db.Date
-  endDate   DateTime        @db.Date
-  client    Client          @relation(fields: [clientId], references: [id])
-  clientId  String
-  rooms     Room[]
-  speakers  Speaker[]
-  sessions  Session[]
-  versions  AgendaVersion[]
-  cues      Cue[]
-  roles     CallRole[]
-  marks     LiveMark[]
-  staffing  Assignment[]
-  sponsors     Sponsor[]
-  deliverables Deliverable[]
-  rules        ValidationRule[]
-  packages     DistributionPackage[]
-  deadlines    DeadlinePolicy[]
-  budget       BudgetLine[]
-  snapshots    BudgetSnapshot[]
-  nags         ComplianceReminder[]
+  id              String                @id @default(cuid())
+  name            String
+  timezone        String
+  startDate       DateTime              @db.Date
+  endDate         DateTime              @db.Date
+  client          Client                @relation(fields: [clientId], references: [id])
+  clientId        String
+  rooms           Room[]
+  speakers        Speaker[]
+  sessions        Session[]
+  versions        AgendaVersion[]
+  cues            Cue[]
+  roles           CallRole[]
+  marks           LiveMark[]
+  staffing        Assignment[]
+  sponsors        Sponsor[]
+  deliverables    Deliverable[]
+  rules           ValidationRule[]
+  packages        DistributionPackage[]
+  deadlines       DeadlinePolicy[]
+  budget          BudgetLine[]
+  snapshots       BudgetSnapshot[]
+  nags            ComplianceReminder[]
+  blocks          RoomBlock[]
   /// The agenda version the run sheet is built from; stale when behind (D-003).
-  runSheetVersion Int         @default(0)
+  runSheetVersion Int                   @default(0)
 }
 
 /// Turnover between two sessions in a room is strike + reset.
 model Room {
-  id            String    @id @default(cuid())
+  id            String                @id @default(cuid())
   name          String
-  strikeMinutes Int       @default(0)
-  resetMinutes  Int       @default(0)
-  event         Event     @relation(fields: [eventId], references: [id])
+  strikeMinutes Int                   @default(0)
+  resetMinutes  Int                   @default(0)
+  event         Event                 @relation(fields: [eventId], references: [id])
   eventId       String
   sessions      Session[]
   cues          Cue[]
@@ -82,26 +83,27 @@ model Speaker {
   eventId  String
   sessions SessionSpeaker[]
 
-  state             SpeakerState @default(invited)
-  bio               String       @default("")
+  state            SpeakerState @default(invited)
+  bio              String       @default("")
   /// Filled by S-8's upload pipeline; S-10 flags its absence.
-  headshotUrl       String?
-  avNeeds           String       @default("")
+  headshotUrl      String?
+  avNeeds          String       @default("")
   /// Integer cents (hard rule 4).
-  honorariumCents   Int?
+  honorariumCents  Int?
   /// The e-sign seam.
-  contractSignedAt  DateTime?
+  contractSignedAt DateTime?
 
   /// Stamped when the three flags below were last recorded — "on file", not that they are all yes.
   consentRecordedAt     DateTime?
-  consentRecordSession  Boolean @default(false)
-  consentDistributeDeck Boolean @default(false)
-  consentPublishVideo   Boolean @default(false)
+  consentRecordSession  Boolean   @default(false)
+  consentDistributeDeck Boolean   @default(false)
+  consentPublishVideo   Boolean   @default(false)
 
-  transitions SpeakerTransition[]
+  transitions     SpeakerTransition[]
   /// SHA-256 of the portal token; the raw token is shown once. Reissue overwrites, killing the old link.
-  portalTokenHash String? @unique
+  portalTokenHash String?             @unique
   deliverables    Deliverable[]
+  rooms           RoomReservation[]
 }
 
 /// Append-only (trigger): every lifecycle move, including a producer's correction back.
@@ -120,19 +122,19 @@ model SpeakerTransition {
 
 /// The draft grid. Edits are free; only a conflict-free grid publishes.
 model Session {
-  id       String           @id @default(cuid())
-  title    String
-  day      DateTime         @db.Date
-  startMin Int
-  endMin   Int
-  event    Event            @relation(fields: [eventId], references: [id])
-  eventId  String
-  room     Room             @relation(fields: [roomId], references: [id])
-  roomId   String
-  speakers SessionSpeaker[]
+  id          String           @id @default(cuid())
+  title       String
+  day         DateTime         @db.Date
+  startMin    Int
+  endMin      Int
+  event       Event            @relation(fields: [eventId], references: [id])
+  eventId     String
+  room        Room             @relation(fields: [roomId], references: [id])
+  roomId      String
+  speakers    SessionSpeaker[]
   /// A rehearsal is a session that is not on the public agenda (D-013): same
   /// conflict engine, excluded from publishAgenda's snapshot.
-  isRehearsal Boolean @default(false)
+  isRehearsal Boolean          @default(false)
 
   @@index([eventId, day])
 }
@@ -261,11 +263,12 @@ model LiveMark {
 /// across every event (Groundwork's crew-day cap): a second show the same day
 /// counts against the same person.
 model Staff {
-  id               String       @id @default(cuid())
-  name             String       @unique
-  maxMinutesPerDay Int          @default(720)
+  id               String            @id @default(cuid())
+  name             String            @unique
+  maxMinutesPerDay Int               @default(720)
   assignments      Assignment[]
   marks            LiveMark[]
+  rooms            RoomReservation[]
 }
 
 enum DayRole {
@@ -336,8 +339,8 @@ model Deliverable {
 /// An uploaded file. Append-only (trigger): v1…vN are all kept, numbers dense.
 /// Facts come from the file (src/content/facts.ts), never from the uploader.
 model ContentVersion {
-  id            String          @id @default(cuid())
-  deliverable   Deliverable     @relation(fields: [deliverableId], references: [id])
+  id            String           @id @default(cuid())
+  deliverable   Deliverable      @relation(fields: [deliverableId], references: [id])
   deliverableId String
   number        Int
   filename      String
@@ -493,11 +496,12 @@ model Reminder {
 /// A company Showcall buys from. House-wide, like Staff: one caterer across
 /// every event, one COI on file for all of them.
 model Vendor {
-  id    String               @id @default(cuid())
-  name  String               @unique
-  docs  ComplianceDoc[]
-  lines BudgetLine[]
-  nags  ComplianceReminder[]
+  id     String               @id @default(cuid())
+  name   String               @unique
+  docs   ComplianceDoc[]
+  lines  BudgetLine[]
+  nags   ComplianceReminder[]
+  blocks RoomBlock[]
 }
 
 enum ComplianceKind {
@@ -551,16 +555,17 @@ enum BudgetCategory {
 /// Committed is what is contracted; actual is what has been invoiced. Lines
 /// are working state — the history is the snapshots.
 model BudgetLine {
-  id             String         @id @default(cuid())
+  id             String             @id @default(cuid())
   category       BudgetCategory
   description    String
   committedCents Int
-  actualCents    Int            @default(0)
-  clientBillable Boolean        @default(true)
-  event          Event          @relation(fields: [eventId], references: [id])
+  actualCents    Int                @default(0)
+  clientBillable Boolean            @default(true)
+  event          Event              @relation(fields: [eventId], references: [id])
   eventId        String
-  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
+  vendor         Vendor?            @relation(fields: [vendorId], references: [id])
   vendorId       String?
+  attrition      AttritionDecision?
 
   @@index([eventId])
 }
@@ -581,4 +586,107 @@ model BudgetSnapshot {
   eventId        String
 
   @@unique([eventId, number])
+}
+
+/// A negotiated hotel block (P0-5): rooms × nights × rate. The hotel is a
+/// Vendor, so accepted exposure lands on the budget against it (D-020).
+model RoomBlock {
+  id           String               @id @default(cuid())
+  event        Event                @relation(fields: [eventId], references: [id])
+  eventId      String
+  hotel        Vendor               @relation(fields: [hotelId], references: [id])
+  hotelId      String
+  rateCents    Int
+  /// Pickup pace is measured from the day the contract was signed.
+  contractedOn DateTime             @db.Date
+  /// After this day the hotel takes unsold rooms back: nothing books or releases.
+  cutoffOn     DateTime             @db.Date
+  nights       BlockNight[]
+  thresholds   AttritionThreshold[]
+  reservations RoomReservation[]
+  decisions    AttritionDecision[]
+}
+
+/// Rooms contracted on one night, as signed. Releases never edit this; they are decisions.
+model BlockNight {
+  id       String         @id @default(cuid())
+  block    RoomBlock      @relation(fields: [blockId], references: [id])
+  blockId  String
+  night    DateTime       @db.Date
+  rooms    Int
+  released BlockRelease[]
+
+  @@unique([blockId, night])
+}
+
+/// "Fill `percent`% of contracted room-nights by `dueOn`, or pay the shortfall at the block rate."
+model AttritionThreshold {
+  id        String              @id @default(cuid())
+  block     RoomBlock           @relation(fields: [blockId], references: [id])
+  blockId   String
+  dueOn     DateTime            @db.Date
+  percent   Int
+  decisions AttritionDecision[]
+
+  @@unique([blockId, dueOn])
+}
+
+enum GuestKind {
+  attendee
+  speaker
+  staff
+  vip
+}
+
+/// Rooms booked into the block. Speaker and staff rooms link their person (CHECK).
+model RoomReservation {
+  id        String    @id @default(cuid())
+  block     RoomBlock @relation(fields: [blockId], references: [id])
+  blockId   String
+  kind      GuestKind
+  guest     String
+  rooms     Int       @default(1)
+  arriveOn  DateTime  @db.Date
+  departOn  DateTime  @db.Date
+  bookedOn  DateTime  @db.Date
+  speaker   Speaker?  @relation(fields: [speakerId], references: [id])
+  speakerId String?
+  staff     Staff?    @relation(fields: [staffId], references: [id])
+  staffId   String?
+
+  @@index([blockId])
+}
+
+enum AttritionChoice {
+  release
+  accept
+}
+
+/// A decision answering a threshold's alert. Append-only (trigger): the log is the record.
+/// A release carries its per-night split; an accept carries the budget line it posted.
+model AttritionDecision {
+  id            String             @id @default(cuid())
+  block         RoomBlock          @relation(fields: [blockId], references: [id])
+  blockId       String
+  threshold     AttritionThreshold @relation(fields: [thresholdId], references: [id])
+  thresholdId   String
+  choice        AttritionChoice
+  roomNights    Int
+  /// What an accept added to the budget (net of earlier accepts); 0 for a release.
+  exposureCents Int
+  decidedOn     DateTime           @db.Date
+  decidedAt     DateTime
+  releases      BlockRelease[]
+  budgetLine    BudgetLine?        @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
+  budgetLineId  String?            @unique
+}
+
+/// Rooms handed back to the hotel on one night. Append-only.
+model BlockRelease {
+  id         String            @id @default(cuid())
+  decision   AttritionDecision @relation(fields: [decisionId], references: [id])
+  decisionId String
+  night      BlockNight        @relation(fields: [nightId], references: [id])
+  nightId    String
+  rooms      Int
 }

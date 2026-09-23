@@ -11,6 +11,7 @@ import { saveSession } from '../src/agenda/grid';
 import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
+import { addThreshold, createBlock, reserve } from '../src/attrition/attrition';
 import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
 import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
 import { sendDueReminders, setLeadDays } from '../src/chase/chase';
@@ -258,6 +259,32 @@ await updateLine(led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); 
 await updateLine(lunch.id, { actualCents: 15_120_00 });
 const nags = await sendComplianceNags(event.id, fixedClock(new Date(systemClock.now().getTime() - 10 * DAY))).catch(() => 0);
 
+// A second event, 40 days out, so the room block has a decision coming due:
+// 280 room-nights at $239, 50% by D-60 met, 80% by D-30 ten days away and
+// projecting 19 short. Pickup is booked on the days it happened.
+const s1 = addDays(d1, 40);
+const kickoff = await createEvent({ name: 'Northwind Fall Sales Kickoff', clientName: 'Northwind Health Partners', timezone: TZ, startDate: s1, endDate: addDays(s1, 1) });
+const hotel = await addVendor('Lakeview Grand Hotel');
+await recordDoc(hotel.id, 'coi', addDays(d1, -150), addDays(d1, 215));
+await recordDoc(hotel.id, 'w9', addDays(d1, -150), null);
+const hotelBlock = await createBlock(kickoff.id, {
+  hotelId: hotel.id, rateCents: 23_900, contractedOn: addDays(d1, -120), cutoffOn: addDays(s1, -21),
+  nights: [{ night: addDays(s1, -1), rooms: 40 }, { night: s1, rooms: 120 }, { night: addDays(s1, 1), rooms: 120 }],
+});
+await addThreshold(hotelBlock.id, addDays(s1, -60), 50);
+await addThreshold(hotelBlock.id, addDays(s1, -30), 80);
+const onDay = (n: number) => fixedClock(`${addDays(d1, n)}T17:00:00Z`);
+const stay = (arrive: number, nights: number) => ({ arriveOn: addDays(s1, arrive), departOn: addDays(s1, arrive + nights) });
+await reserve(hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — early registrants', rooms: 40, ...stay(-1, 3) }, onDay(-100));
+await reserve(hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — regional teams', rooms: 30, ...stay(0, 2) }, onDay(-50));
+for (const name of ['Priya Castellanos', 'Jonah Whitfield']) {
+  const speakerId = (await prisma.speaker.create({ data: { eventId: kickoff.id, name } })).id;
+  await reserve(hotelBlock.id, { kind: 'speaker', speakerId, ...stay(0, 2) }, onDay(-10));
+}
+for (const s of await prisma.staff.findMany({ orderBy: { name: 'asc' }, take: 2 })) await reserve(hotelBlock.id, { kind: 'staff', staffId: s.id, ...stay(0, 2) }, onDay(-8));
+await reserve(hotelBlock.id, { kind: 'vip', guest: 'Northwind CEO', ...stay(0, 2) }, onDay(-5));
+
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
 console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags. /events/${event.id}/live`);
+console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due. /events/${kickoff.id}/rooms`);
 await prisma.$disconnect();

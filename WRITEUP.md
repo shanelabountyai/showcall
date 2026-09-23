@@ -485,3 +485,44 @@ worklist is per event and asks only of vendors with money on that event, and
 that is valid now but lapses mid-show is exactly the case that bites.
 Gate: 141 vitest tests; the 3 new budget e2e specs pass against a production
 build.
+
+## Room-block attrition (P0-5, S-13)
+
+A hotel block is modelled as the contract reads: rooms per night, a nightly
+rate, a signing date, a cutoff, and dated thresholds ("80% of contracted
+room-nights by D-30, or pay the shortfall at the block rate"). Reservations
+come out of the block's per-night inventory, and that includes speaker, staff
+and VIP rooms. Each one is dated the day it was booked. Everything else is
+derived on read by one pure function, `assess()`: pickup as of each threshold,
+the projection at the pace so far, the requirement, and the shortfall in
+room-nights and cents.
+
+An open shortfall within 14 days of its threshold becomes an alert, framed as
+the decision it is. The seeded example reads "Release 24 room-nights by Sat,
+Oct 3 or accept $4,541.00 (19 room-nights short)". The release count is
+exact: it is the smallest release that clears the shortfall, and a fixture
+proves that one fewer does not. Either answer is an append-only decision. A
+release hands rooms back, emptiest nights first. An accept posts the exposure
+to the budget against the hotel, in the same transaction, through the S-12
+sink. Thresholds net against each other (D-020), so accepting D-60 and then
+D-30 puts the worst shortfall on the budget, never the sum. Each decision
+carries the figure the producer was looking at, and it is refused if the
+numbers have moved since then.
+
+**Defects found.** One, in the first draft of the state logic: a passed
+threshold whose shortfall had been accepted read as *met*. It was not met.
+It was paid for. The board now has an `accepted` state, and a test covers it.
+
+**What it deliberately does not do.** Cancellations, release caps, partial
+releases, and the master-bill cost of the rooms themselves (D-020). The alert
+lives on the rooms page and does not go to an outbox, because its audience is
+the producer.
+
+**Verdict.** Producer review said "this is where shows lose real money
+quietly." **Validated.** The quiet part turned out to be concrete: shortfall
+math is simple on the day of the threshold and invisible before it. The pace
+projection is what turns it into a decision with a deadline, and framing the
+decision in the hotel's own units (room-nights, by a date) is what makes the
+release option real rather than theoretical.
+Gate: 157 vitest tests; the budget and new attrition e2e specs pass against a
+production build.

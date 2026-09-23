@@ -1,5 +1,5 @@
 import type { Clock } from '../clock';
-import { prisma } from '../db';
+import { prisma, type Tx } from '../db';
 import type { BudgetCategory } from '../generated/prisma/enums';
 import { usd } from '../money';
 
@@ -21,10 +21,11 @@ function cents(n: number, what: string) {
 
 export type LineInput = { category: BudgetCategory; description: string; committedCents: number; clientBillable?: boolean; vendorId?: string | null };
 
-export async function addLine(eventId: string, input: LineInput) {
+/** `db` lets a feature post its line inside its own transaction, so the line and its reason land together. */
+export async function addLine(eventId: string, input: LineInput, db: Tx = prisma) {
   const description = input.description.trim();
   if (!description) throw new BudgetRefused('A budget line needs a description');
-  return prisma.budgetLine.create({
+  return db.budgetLine.create({
     data: {
       eventId, category: input.category, description, committedCents: cents(input.committedCents, 'Committed'),
       clientBillable: input.clientBillable ?? true, vendorId: input.vendorId || null,
