@@ -15,6 +15,7 @@ import { addThreshold, createBlock, reserve } from '../src/attrition/attrition';
 import { decideBudget, issueClientLink } from '../src/budget/approval';
 import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
 import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
+import { addAttendee, addNeed } from '../src/rfp/needs';
 import { addSchemaLine, createRfp, enterQuote, setQuantity, setRegistration } from '../src/rfp/rfp';
 import { sendDueReminders, setLeadDays } from '../src/chase/chase';
 import { createPlan, escalateDue } from '../src/contingency/contingency';
@@ -376,7 +377,23 @@ await quote(vendor['Lakeshore Catering'].id, 72, true, { 'Service staff': 300 },
 await quote(harvest.id, 66, true, { 'Afternoon break': 'excluded', Linens: 450, 'Delivery & setup': 600 }, -6);
 await quote(summit.id, 20_500, false, { 'Afternoon break': 6 }, -4);
 
+// Dietary and accessibility (P1-7): the needs list, and synthetic attendee
+// records for 238 of the 260 registered, so the rollup shows 22 unknown.
+const NEEDS = { dietary: ['Vegetarian', 'Vegan', 'Gluten-free', 'Nut allergy', 'Halal', 'Kosher'], access: ['Wheelchair access', 'ASL interpreter', 'Hearing loop'] } as const;
+const needId: Record<string, string> = {};
+for (const [kind, labels] of Object.entries(NEEDS)) for (const l of labels) needId[l] = (await addNeed(kind as keyof typeof NEEDS, l)).id;
+const EVERY: [string, number][] = [['Vegetarian', 9], ['Vegan', 23], ['Gluten-free', 17], ['Nut allergy', 31], ['Halal', 29], ['Kosher', 53], ['Wheelchair access', 97], ['ASL interpreter', 119], ['Hearing loop', 71]];
+const FIRST = ['Avery', 'Jordan', 'Riley', 'Morgan', 'Casey', 'Quinn', 'Rowan', 'Emerson', 'Harper', 'Skyler', 'Parker', 'Sage', 'Reese'];
+const LAST = ['Lindqvist', 'Okonkwo', 'Marchetti', 'Nakamura', 'Delacroix', 'Abernathy', 'Villanueva', 'Castellano', 'Haverford', 'Oyelowo', 'Brandt', 'Sorensen', 'Iwu', 'Kowalczyk', 'Ferreira', 'Thorne', 'Adebayo', 'Moreau', 'Halvorsen'];
+let nth = 0;
+for (const [type, records] of [['Sales reps', 200], ['Regional managers', 26], ['Guests', 12]] as const) {
+  for (let i = 0; i < records; i++, nth++) {
+    const [first, last] = [FIRST[nth % FIRST.length]!, LAST[nth % LAST.length]!];
+    await addAttendee(kickoff.id, { attendeeType: type, name: `${first} ${last}`, email: `${first}.${last}.${nth}@example.test`.toLowerCase(), needIds: EVERY.filter(([, k]) => nth % k === k - 1).map(([l]) => needId[l]!) });
+  }
+}
+
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
 console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags, ${escalations} escalations. /events/${event.id}/live`);
-console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due, a catering RFP with three quotes. /events/${kickoff.id}/rooms`);
+console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due, a catering RFP with three quotes, ${nth} attendee records. /events/${kickoff.id}/rooms`);
 await prisma.$disconnect();

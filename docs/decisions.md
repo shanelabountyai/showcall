@@ -777,3 +777,33 @@ Not done: "scope" here means budget lines. Agenda changes do not go to the
 client. There is no email to the client (the link is shown once, as with every
 portal), and there is no per-line approve/decline, because the answer covers
 the whole snapshot.
+
+## D-029 · 2026-09-23 · Dietary and accessibility: attendee records, a counts-only projection, a fixed list of needs
+
+**Shane picked attendee records over counts-only storage.** Registration was
+only a headcount per attendee type. The options were to store needs as counts
+(names never enter the database), to store anonymous responses, or to store
+attendees with names and emails and project counts from them. Shane chose the
+third: the producer sees who needs what, and catering sees `rollup` in
+`src/rfp/needs.ts`. Its shape is asserted by sweep, the same way call sheets
+are (hard rule 7).
+
+**Needs come from a fixed list, never free text.** A "notes" field is how a
+name reaches the caterer ("Dana's nut allergy"). Every label in a rollup is a
+row of `Need`, and an attendee references needs by id.
+
+**Counts are event-wide, never split by attendee type.** Two VIPs and "VIP:
+wheelchair 1" identifies a person. Catering gets exact counts, because a
+suppressed count of 1 is a vegan with no meal. The page also says how many
+registered people have no record, so an unknown is not read as a zero.
+
+**The caterer sees it only through a portal role whose vendor holds this
+event's catering contract** (D-026 link rules). Every other role gets null.
+
+**Records and headcount are separate on purpose.** `Registration.registered`
+still drives per-head pricing (D-021). Attendee records are whoever has come
+across from registration so far, and the gap is shown rather than reconciled.
+
+Not done: importing a registration export, editing or removing an attendee,
+per-meal counts (breakfast vs gala), and a Knotwork shared module (Knotwork
+does not exist on disk, D-001).

@@ -816,3 +816,28 @@ some lines and not others.
 waits for the other party. In event production that would put the client in
 the path of a show-day decision. Here the client's consent governs what they
 are billed, and the database-held close is where that is enforced.
+
+## Dietary and accessibility rollups (P1-7, S-24)
+
+The kickoff now has attendee records: 238 of its 260 registered people, each
+with a name, an email and any needs from a fixed list (vegetarian, nut allergy,
+wheelchair access and so on). The producer sees the roster. Catering sees
+counts: on the RFP page, and on the caterer's own portal link once it holds the
+event's catering contract. For example: vegetarian 26, wheelchair access 2, and
+22 registered with no record, so their needs are unknown (D-029).
+
+**Defects found.** The Prisma drift from S-22 and S-23 came back a third time
+(the generated migration drops the hand-written contingency foreign key). The
+generated timestamp also sorted *before* S-23's migration, so the file was
+renamed. The design risk was a free-text need: a note field is the easiest way
+for a name to reach a vendor, so needs are ids into a list. Splitting counts by
+attendee type was refused for the same reason, because a type with two people
+turns a count into a person.
+
+**What it deliberately does not do.** Suppress small counts (a caterer needs
+the one vegan meal), import a registration export, or edit attendees.
+
+**Verdict.** Validated. "Counts, never names" holds, and the sweep asserts
+that no name or email reaches the rollup or the caterer's portal. The PRD's
+"shared module with Knotwork" was cut, because there is no Knotwork to share
+with.

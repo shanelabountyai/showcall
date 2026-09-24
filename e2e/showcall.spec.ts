@@ -335,6 +335,21 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     });
   });
 
+  test.describe('dietary and accessibility rollup (S-24)', () => {
+    test('catering sees counts and the unknowns; names stay in the producer roster', async ({ page }) => {
+      await page.goto('/');
+      await page.getByRole('link', { name: 'Northwind Fall Sales Kickoff' }).click();
+      await page.getByRole('link', { name: 'RFPs' }).click();
+      const counts = page.getByRole('region', { name: 'Catering rollup' });
+      await expect(counts).toContainText('counts from 238 attendee records of 260 registered, never names. 22 registered have no record');
+      await expect(counts).toContainText('Vegetarian (dietary): 26');
+      await expect(counts).toContainText('Wheelchair access (access): 2');
+      await expect(counts).not.toContainText('Avery');
+      await page.getByText('Attendees — 238 records (producer only)').click();
+      await expect(page.getByRole('group', { name: 'Attendees' })).toContainText('Avery Lindqvist');
+    });
+  });
+
   test.describe('RFP normalization (S-14)', () => {
     test('quotes compare like for like, the gap is named, and the award lands on the budget flagged', async ({ page }) => {
       await page.goto('/');

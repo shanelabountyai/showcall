@@ -3,6 +3,7 @@ import type { Clock } from '../clock';
 import { MAX_UPLOAD_BYTES, type Upload } from '../content/pipeline';
 import { prisma } from '../db';
 import { hashToken, linkLive, newToken } from '../portal';
+import { cateringRollup } from '../rfp/needs';
 import { fromDbDate, localNow, toDbDate, type LocalDate } from '../time';
 import { diffCallSheets, type CallSheet } from './callsheet';
 
@@ -58,6 +59,8 @@ export async function resolveCrewPortal(token: string, clock: Clock) {
       changes: prev ? diffCallSheets(prev.content as CallSheet, last.content as CallSheet) : null,
     },
     coi,
+    /** Counts only (P1-7): shown when this role's vendor caters the event. */
+    catering: await cateringRollup(role.eventId, role.vendor?.id ?? null),
   };
 }
 

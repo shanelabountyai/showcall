@@ -5,6 +5,7 @@ import { prisma } from '@/src/db';
 import { BudgetCategory, Inclusion, LineBasis } from '@/src/generated/prisma/enums';
 import { parseCents, usd } from '@/src/money';
 import { addSchemaLine, advanceContract, award, createRfp, enterQuote, rfpBoard, RfpRefused, setQuantity, setRegistration } from '@/src/rfp/rfp';
+import { addAttendee, needList, rollup, roster } from '@/src/rfp/needs';
 import { fromDbDate, shortDay } from '@/src/time';
 import { refusable } from '../refusable';
 
@@ -35,10 +36,18 @@ export default async function Rfps({ params, searchParams }: { params: Promise<{
     prisma.vendor.findMany({ orderBy: { name: 'asc' } }),
     prisma.lineSchema.findMany({ orderBy: [{ category: 'asc' }, { position: 'asc' }] }),
   ]);
+  const [people, needs, counts] = await Promise.all([roster(eventId), needList(), rollup(eventId)]);
 
   async function doRegistration(form: FormData) {
     'use server';
     await refusable(here, () => setRegistration(eventId, String(form.get('type') ?? ''), Number(form.get('registered')), Number(form.get('capacity'))), RfpRefused);
+  }
+  async function doAttendee(form: FormData) {
+    'use server';
+    await refusable(here, () => addAttendee(eventId, {
+      attendeeType: String(form.get('type') ?? ''), name: String(form.get('name') ?? ''), email: String(form.get('email') ?? ''),
+      needIds: form.getAll('need').map(String),
+    }), RfpRefused);
   }
   async function doSchema(form: FormData) {
     'use server';
@@ -101,6 +110,36 @@ export default async function Rfps({ params, searchParams }: { params: Promise<{
           <button type="submit">Set counts</button>
         </form>
       </section>
+
+      <section aria-label="Catering rollup">
+        <h2>Dietary and accessibility — counts</h2>
+        <p>
+          What catering sees: counts from {counts.records} attendee records of {counts.registered} registered, never names.
+          {counts.registered > counts.records && ` ${counts.registered - counts.records} registered have no record, so their needs are unknown.`}
+        </p>
+        <ul>
+          {counts.needs.map((n) => <li key={n.label}>{n.label} ({n.kind}): {n.count}</li>)}
+        </ul>
+      </section>
+
+      <details aria-label="Attendees">
+        <summary>Attendees — {people.length} records (producer only)</summary>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Needs</th></tr></thead>
+          <tbody>
+            {people.map((a) => (
+              <tr key={a.id}><td>{a.name}</td><td>{a.email}</td><td>{a.attendeeType}</td><td>{a.needs.map((n) => n.need.label).join(', ')}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <form action={doAttendee}>
+          <input name="name" required aria-label="Attendee name" placeholder="Name" />{' '}
+          <input name="email" type="email" required aria-label="Attendee email" placeholder="Email" />{' '}
+          <select name="type" aria-label="Attendee type">{board.registrations.map((r) => <option key={r.id}>{r.attendeeType}</option>)}</select>{' '}
+          {needs.map((n) => <label key={n.id}><input type="checkbox" name="need" value={n.id} /> {n.label} </label>)}
+          <button type="submit">Add attendee</button>
+        </form>
+      </details>
 
       {board.rfps.map(({ rfp, comparison: c }) => {
         const awarded = rfp.contract;

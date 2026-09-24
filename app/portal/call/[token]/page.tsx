@@ -83,6 +83,16 @@ export default async function CrewPortal({ params, searchParams }: { params: Pro
         </>
       )}
 
+      {p.catering && (
+        <section aria-label="Dietary and accessibility">
+          <h2>Dietary and accessibility — counts</h2>
+          <p>From {p.catering.records} attendee records of {p.catering.registered} registered.{p.catering.registered > p.catering.records && ` ${p.catering.registered - p.catering.records} have not told us yet.`}</p>
+          <ul>
+            {p.catering.needs.filter((n) => n.count).map((n) => <li key={n.label}>{n.label}: {n.count}</li>)}
+          </ul>
+        </section>
+      )}
+
       {p.coi && (
         <section aria-label="Certificate of insurance">
           <h2>Certificate of insurance — {p.vendor}</h2>
