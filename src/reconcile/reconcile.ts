@@ -1,4 +1,5 @@
 import { assess, blockInclude, contractOf, type Contract } from '../attrition/attrition';
+import { approvalState } from '../budget/approval';
 import { budgetToActuals, snapshot } from '../budget/budget';
 import type { Clock } from '../clock';
 import { prisma, type Tx } from '../db';
@@ -89,10 +90,11 @@ export function finalAttrition(c: Contract, today: LocalDate) {
 
 async function blockers(db: Tx, eventId: string, today: LocalDate) {
   const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
-  const [lines, blocks, closed] = await Promise.all([
+  const [lines, blocks, closed, approval] = await Promise.all([
     db.budgetLine.findMany({ where: { eventId }, orderBy: [{ category: 'asc' }, { description: 'asc' }], include: { vendor: { select: { name: true } } } }),
     db.roomBlock.findMany({ where: { eventId }, orderBy: { contractedOn: 'asc' }, include: blockInclude }),
     db.budgetSnapshot.findFirst({ where: { eventId, final: true } }),
+    approvalState(eventId, db),
   ]);
   const endDate = fromDbDate(event.endDate);
   const attrition = blocks.map((b) => ({ hotel: b.hotel.name, rateCents: b.rateCents, ...finalAttrition(contractOf(b), today) }));
@@ -108,6 +110,8 @@ async function blockers(db: Tx, eventId: string, today: LocalDate) {
     for (const t of a.ahead) issues.push(`${a.hotel}: the ${t.percent}% threshold on ${shortDay(t.dueOn)} has not passed yet`);
     if (a.gapCents > 0) issues.push(`${a.hotel}: ${usd(a.gapCents)} of attrition is owed and not on the budget. Accept it on the rooms page`);
   }
+  // D-028: the client is billed only what they approved. Send them the budget from the budget page.
+  for (const g of approval.unapproved) issues.push(`Not approved by the client: ${g.description}, ${g.isNew ? usd(g.cents) : `+${usd(g.cents)}`}`);
   return { event, lines, attrition, closed, issues };
 }
 
@@ -142,6 +146,6 @@ export async function closeBudget(eventId: string, expectedActualCents: number, 
     if (issues.length) throw new CloseRefused(`Cannot close yet: ${issues.join('; ')}`);
     const actual = lines.reduce((s, l) => s + l.actualCents, 0);
     if (actual !== expectedActualCents) throw new CloseRefused(`The numbers moved: actuals now total ${usd(actual)}, not ${usd(expectedActualCents)}. Look again.`);
-    return snapshot(tx, eventId, 'Close', clock, true);
+    return snapshot(tx, eventId, 'Close', clock, { final: true });
   });
 }

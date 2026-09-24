@@ -739,3 +739,41 @@ Not done: per-crew overtime in reconciliation (would need rates and the GO
 log's actual wrap), turnaround between days, and an escalating penalty scale.
 A gap between cues is treated as paid time (a split call), so a long gap still
 counts toward the day.
+
+## D-028 · 2026-09-23 · Client approval: an approved baseline, unapproved spend blocks the close, lines never wait
+
+Shane's pick, as recommended: the approved-baseline option, not pending change
+orders.
+
+**The client approves a snapshot, not a change.** The producer sends a
+snapshot (`BudgetSnapshot.forClient`), and the client approves or declines it
+through a link (`Event.clientTokenHash`, the same token and expiry rules as
+D-026). The answer is a `BudgetApproval`: one per snapshot, append-only by
+trigger. A decline must say why and every answer must carry a typed name
+(check constraints). Only the latest sent snapshot can be answered. The same
+answer twice does nothing, and the opposite answer is refused. The latest
+approved snapshot is the baseline. A decline leaves the earlier baseline in
+place.
+
+**Lines never wait on the client.** Pending change orders were the
+alternative. Under them, attrition accepts, RFP awards and a show-day rain
+call would all need a pending path, and a rain call would wait on a client's
+inbox. Instead, spend posts as it always has. Billable spend above the
+baseline is *unapproved*, and the close (D-025) is refused while any of it
+remains, with each line named. The client is billed only what they approved.
+
+**Unapproved is per line, at exposure.** A line's exposure is
+`max(committed, actual)` if it is billable, and $0 if it is house cost. Each
+line is compared with its own figure in the baseline, so moving money out of
+one line into a new one still counts as a change the client has not seen. A
+decrease never needs approval. With no baseline, every billable cent is
+unapproved.
+
+**The client sees a projection.** Their page shows billable lines only
+(category, description and amount), plus what they last approved for each.
+It never shows vendors, house lines or actuals broken out.
+
+Not done: "scope" here means budget lines. Agenda changes do not go to the
+client. There is no email to the client (the link is shown once, as with every
+portal), and there is no per-line approve/decline, because the answer covers
+the whole snapshot.

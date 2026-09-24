@@ -42,6 +42,8 @@ model Event {
   deadlines       DeadlinePolicy[]
   budget          BudgetLine[]
   snapshots       BudgetSnapshot[]
+  /// The client's approval link (P1-6, D-028): SHA-256 of the raw token.
+  clientTokenHash String?               @unique
   nags            ComplianceReminder[]
   blocks          RoomBlock[]
   registrations   Registration[]
@@ -656,10 +658,28 @@ model BudgetSnapshot {
   /// The close (D-025): at most one per event (partial unique index), and
   /// once it exists the database refuses every write to the event's lines.
   final          Boolean  @default(false)
+  /// Sent to the client (D-028): the client's portal shows the latest one.
+  forClient      Boolean  @default(false)
   event          Event    @relation(fields: [eventId], references: [id])
   eventId        String
+  approval       BudgetApproval?
 
   @@unique([eventId, number])
+}
+
+/// The client's answer on a sent snapshot (P1-6, D-028). One per snapshot,
+/// append-only (trigger). The latest approved snapshot is the baseline:
+/// billable spend above it is unapproved and blocks the close.
+model BudgetApproval {
+  id         String         @id @default(cuid())
+  snapshot   BudgetSnapshot @relation(fields: [snapshotId], references: [id])
+  snapshotId String         @unique
+  approved   Boolean
+  /// Who the client says they are. The link is not an identity.
+  signedBy   String
+  /// Why, when declined (check constraint).
+  note       String?
+  decidedAt  DateTime
 }
 
 /// A negotiated hotel block (P0-5): rooms × nights × rate. The hotel is a

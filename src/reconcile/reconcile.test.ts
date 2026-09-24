@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { addThreshold, assess, createBlock, decide, reserve, type Contract } from '../attrition/attrition';
+import { decideBudget, issueClientLink } from '../budget/approval';
 import { addLine, BudgetRefused, takeSnapshot, updateLine } from '../budget/budget';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
@@ -82,7 +83,8 @@ describe('budget close', () => {
     const line = await addLine(event.id, { category: 'av', description: 'LED wall', committedCents: 1_800_000 });
     await addLine(event.id, { category: 'other', description: 'Cancelled shuttle', committedCents: 0 });
     await updateLine(line.id, { actualCents: 1_950_000 });
-    await takeSnapshot(event.id, 'client v1', after);
+    const v1 = await takeSnapshot(event.id, 'client v1', after, true);
+    await decideBudget(await issueClientLink(event.id), v1.id, { approved: true, signedBy: 'Dana' }, fixedClock('2026-10-15T15:00:00Z'));
     await expect(closeBudget(event.id, 1_800_000, after)).rejects.toThrow(/actuals now total \$19,500\.00/);
 
     const close = await closeBudget(event.id, 1_950_000, after);
@@ -112,6 +114,9 @@ describe('budget close', () => {
 
     const accepted = await decide(d30.id, 'accept', 2_640_000, after);
     await updateLine(accepted.budgetLineId!, { actualCents: 2_640_000 });
+    await expect(closeBudget(event.id, 2_640_000, after)).rejects.toThrow(/Not approved by the client: .*\$26,400\.00/);
+    const v1 = await takeSnapshot(event.id, 'client v1', after, true);
+    await decideBudget(await issueClientLink(event.id), v1.id, { approved: true, signedBy: 'Dana' }, fixedClock('2026-10-15T15:00:00Z'));
     await expect(closeBudget(event.id, 2_640_000, after)).resolves.toMatchObject({ final: true });
   });
 });

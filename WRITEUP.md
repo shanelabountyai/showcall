@@ -789,3 +789,30 @@ warnings rather than refusals, because paying a meal penalty is sometimes the
 right call. The producer should see the cost before committing the change,
 not be blocked by it. The shift turned out to belong to the call role, not to
 the staff assignment: only the role's day moves when the run sheet does.
+
+## Client approval gates (P1-6, S-23)
+
+The producer can now send a budget snapshot to the client, who approves it or
+declines it with a reason through their own link. The last approved snapshot
+is the baseline. Spend still posts without waiting. A rain call on show day
+cannot wait for a client to answer an email. But every billable line that has
+grown past what the client approved, or is new since then, is listed as
+unapproved on the budget page, and the budget cannot close until the client
+signs a snapshot that covers it. In the seed, the client approved v1, so the
+LED wall's change order shows as $1,850 of unapproved spend (D-028).
+
+**Defects found.** The same Prisma migration drift S-22 hit: the generated
+migration again tried to drop the hand-written contingency foreign key. This
+time it was caught by reading the SQL before applying it. The unapproved check
+compares each line separately rather than the total. Comparing totals would
+have missed a swap: $2,000 cut from one line and a new $2,000 line added nets
+to zero.
+
+**What it deliberately does not do.** Hold spend as a pending change order,
+send agenda changes to the client, email the link, or let the client approve
+some lines and not others.
+
+**Verdict.** Changed. The PRD cites Knotwork's dual consent, where each change
+waits for the other party. In event production that would put the client in
+the path of a show-day decision. Here the client's consent governs what they
+are billed, and the database-held close is where that is enforced.

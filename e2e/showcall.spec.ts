@@ -580,4 +580,47 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       expect(res!.headers()['referrer-policy']).toBe('no-referrer');
     });
   });
+
+  test.describe('client approval (S-23)', () => {
+    // After the Phase 4 gate's reseed, as for the crew portal.
+    let eventId = '';
+    test.beforeAll(async ({ request }) => {
+      eventId = (await (await request.get('/')).text()).match(/href="\/events\/([^/"]+)\/grid"/)![1]!;
+    });
+
+    test('a change order is unapproved until the client signs a new snapshot; a decline needs a reason', async ({ page }) => {
+      await page.goto(`/events/${eventId}/budget`);
+      const approval = page.getByRole('region', { name: 'Client approval' });
+      await expect(approval).toContainText('Approved: #1 Client-approved v1, signed by Dana Ruiz');
+      await expect(approval.getByRole('list', { name: 'Unapproved spend' })).toContainText('LED wall and switcher: +$1,850.00');
+
+      await page.getByLabel('Snapshot label').fill('client v2');
+      await page.getByLabel('send to the client for approval').check();
+      await page.getByRole('button', { name: 'Take snapshot' }).click();
+      await expect(approval).toContainText('client v2 — waiting for the client');
+
+      await approval.getByRole('button', { name: /client link/ }).click();
+      await expect(approval.getByRole('status').last()).toContainText('copy it now');
+      await approval.getByRole('link', { name: 'open' }).click();
+      const sent = page.getByRole('region', { name: 'Budget for approval' });
+      await expect(sent.getByRole('row').filter({ hasText: 'LED wall and switcher' })).toContainText(/\$19,850\.00.*\$18,000\.00/);
+      await expect(sent).not.toContainText('Crew meals'); // house cost is not the client's
+
+      await page.getByLabel('Your name').fill('Dana Ruiz');
+      await page.getByRole('button', { name: 'Decline' }).click();
+      await expect(page.locator('p[role="alert"]')).toContainText('Say what needs to change');
+      await page.getByLabel('Your name').fill('Dana Ruiz');
+      await page.getByRole('button', { name: /^Approve/ }).click();
+      await expect(page.getByRole('status')).toContainText('Approved by Dana Ruiz');
+
+      await page.goto(`/events/${eventId}/budget`);
+      await expect(approval).toContainText('All billable spend is approved.');
+    });
+
+    test('a bad client link is a plain 404, with the portal headers', async ({ page }) => {
+      const res = await page.goto('/portal/client/not-a-real-token');
+      expect(res?.status()).toBe(404);
+      expect(res!.headers()['cache-control']).toContain('no-store');
+    });
+  });
 });

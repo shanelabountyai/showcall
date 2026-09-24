@@ -1,12 +1,14 @@
 # Next
 
-**S-23 — P1-6 client approval gates on budget and scope changes.** See `docs/backlog.md` P1. Model pick:
-Opus (money and approval gates). A change a client must sign off on waits until they approve it. The budget
-close (D-025) and snapshots (S-12) are where it hooks in.
+**S-24 — P1-7 dietary and accessibility rollups for catering (counts, never names).** See `docs/backlog.md` P1.
+Model pick: Opus (a privacy projection: counts must never leak a name, and D-018 says it reads S-14's
+registration headcount). Sonnet is defensible if it turns out to be a pure rollup.
 
-State: S-22 shipped (D-027). `CrewRules` (one per event) drives crew work-rule warnings on every cascade
-result (`warnings`, each `isNew`) and on the call-sheets page. They are never refusals. The shift is a call
-role's call to wrap. 212 vitest pass. The e2e sweep is 29/29 on a production build.
+State: S-23 shipped (D-028). The client approves a budget snapshot through `/portal/client/<token>`, and the
+latest approved snapshot is the baseline. Billable spend above it, compared line by line at
+max(committed, actual), is listed on the budget page and blocks the close. Lines never wait on the client.
+217 vitest pass. The e2e sweep is 31/31 on a production build.
 
-Shane chose to build the P1s before closing the project (D-025). Still owed at closure: the exec brief and
-the LinkedIn posts. DEMO.md exists; at closure add the crew portal stop and the rain call's overtime warning.
+Still owed at closure: the exec brief and the LinkedIn posts. DEMO.md exists. At closure, add the crew portal
+stop, the rain call's overtime warning, and the client approval stop (the seed prints the client link; the
+LED change order shows as $1,850 unapproved).

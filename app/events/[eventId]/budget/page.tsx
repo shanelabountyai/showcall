@@ -1,4 +1,6 @@
+import { revalidatePath } from 'next/cache';
 import { notFound } from 'next/navigation';
+import { approvalState, issueClientLink } from '@/src/budget/approval';
 import { addLine, budgetToActuals, BudgetRefused, takeSnapshot, updateLine } from '@/src/budget/budget';
 import { addVendor, complianceBoard, complianceOutbox, ComplianceRefused, KIND_LABEL, KINDS, recordDoc, sendComplianceNags, type ComplianceRow } from '@/src/budget/compliance';
 import { acceptCoi, pendingCoi, PortalRefused } from '@/src/callsheet/portal';
@@ -7,6 +9,7 @@ import { prisma } from '@/src/db';
 import { BudgetCategory, type ComplianceKind } from '@/src/generated/prisma/enums';
 import { parseCents, usd } from '@/src/money';
 import { fromDbDate, shortDay } from '@/src/time';
+import { IssueLink, type Issued } from '../../../issue-link';
 import { refusable } from '../refusable';
 
 export const dynamic = 'force-dynamic';
@@ -38,11 +41,12 @@ export default async function Budget({ params, searchParams }: { params: Promise
   const board = await complianceBoard(eventId, systemClock).catch(() => null);
   if (!board) notFound();
   const here = `/events/${eventId}/budget`;
-  const [view, vendors, nags, uploaded] = await Promise.all([
+  const [view, vendors, nags, uploaded, approval] = await Promise.all([
     budgetToActuals(eventId),
     prisma.vendor.findMany({ orderBy: { name: 'asc' } }),
     complianceOutbox(eventId),
     pendingCoi(eventId),
+    approvalState(eventId),
   ]);
   const worklist = board.rows.filter((r) => r.state !== 'ok');
   const flagged = new Set(worklist.map((r) => r.vendorId));
@@ -68,7 +72,14 @@ export default async function Budget({ params, searchParams }: { params: Promise
 
   async function doSnapshot(form: FormData) {
     'use server';
-    await refusable(here, () => takeSnapshot(eventId, String(form.get('label') ?? ''), systemClock), BudgetRefused);
+    await refusable(here, () => takeSnapshot(eventId, String(form.get('label') ?? ''), systemClock, form.get('forClient') === 'on'), BudgetRefused);
+  }
+
+  async function doClientLink(): Promise<Issued> {
+    'use server';
+    const token = await issueClientLink(eventId);
+    revalidatePath(here);
+    return { url: `/portal/client/${token}`, for: board!.event.name };
   }
 
   async function doVendor(form: FormData) {
@@ -157,13 +168,39 @@ export default async function Budget({ params, searchParams }: { params: Promise
         <p>A snapshot freezes every line as it stands. It is never rewritten; the view above compares against the latest.</p>
         <form action={doSnapshot}>
           <input name="label" required aria-label="Snapshot label" placeholder="Label, e.g. client v2" />{' '}
+          <label><input name="forClient" type="checkbox" /> send to the client for approval</label>{' '}
           <button type="submit">Take snapshot</button>
         </form>
         <ul>
           {view.snapshots.map((s) => (
-            <li key={s.id}>#{s.number} {s.label} — {stamp(s.takenAt)} · committed {usd(s.committedCents)} · actual {usd(s.actualCents)} · billable {usd(s.billableCents)}</li>
+            <li key={s.id}>#{s.number} {s.label} — {stamp(s.takenAt)} · committed {usd(s.committedCents)} · actual {usd(s.actualCents)} · billable {usd(s.billableCents)}{s.forClient && ' · sent to client'}</li>
           ))}
         </ul>
+      </section>
+
+      <section aria-label="Client approval">
+        <h2>Client approval</h2>
+        <p>
+          The client approves a snapshot sent to them. Lines still post without waiting, but billable spend beyond what they approved
+          is listed here and blocks the close until they approve a snapshot that covers it.
+        </p>
+        <p>
+          {approval.baseline ? <>Approved: #{approval.baseline.number} {approval.baseline.label}, signed by {approval.baseline.approval!.signedBy} {stamp(approval.baseline.approval!.decidedAt)}.</> : 'Nothing approved yet.'}
+          {approval.sent && approval.sent.id !== approval.baseline?.id && (
+            <> Latest sent: #{approval.sent.number} {approval.sent.label} — {approval.sent.approval
+              ? <>declined by {approval.sent.approval.signedBy}: “{approval.sent.approval.note}”</>
+              : 'waiting for the client'}.</>
+          )}
+        </p>
+        {approval.unapproved.length > 0 ? (
+          <>
+            <p role="status">{usd(approval.unapprovedCents)} of billable spend is not client-approved.</p>
+            <ul aria-label="Unapproved spend">
+              {approval.unapproved.map((g) => <li key={g.id}>{g.description}: {g.isNew ? `${usd(g.cents)} (new)` : `+${usd(g.cents)}`}</li>)}
+            </ul>
+          </>
+        ) : <p>All billable spend is approved.</p>}
+        <IssueLink action={doClientLink} fields={{}} label={board.event.clientTokenHash ? 'Reissue client link (old one stops working)' : 'Issue client link'} />
       </section>
 
       <section aria-label="Compliance worklist">

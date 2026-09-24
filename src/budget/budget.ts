@@ -80,7 +80,7 @@ export function summarize(lines: Money[]) {
 }
 
 /** The line as it is frozen into a snapshot. */
-type FrozenLine = Money & { id: string; description: string; vendor: string | null };
+export type FrozenLine = Money & { id: string; description: string; vendor: string | null };
 
 /** Budget-to-actuals: every line, the totals, and the drift since the latest snapshot. */
 export async function budgetToActuals(eventId: string) {
@@ -102,14 +102,14 @@ export async function budgetToActuals(eventId: string) {
 }
 
 /** Freeze the budget as it stands. Numbered per event; the unique key refuses a racing duplicate. */
-export async function takeSnapshot(eventId: string, label: string, clock: Clock) {
+export async function takeSnapshot(eventId: string, label: string, clock: Clock, forClient = false) {
   const name = label.trim();
   if (!name) throw new BudgetRefused('A snapshot needs a label — "client v2", "post-RFP", whatever it will be looked up by');
-  return prisma.$transaction((tx) => snapshot(tx, eventId, name, clock));
+  return prisma.$transaction((tx) => snapshot(tx, eventId, name, clock, { forClient }));
 }
 
-/** The snapshot itself, inside the caller's transaction; `final` makes it the close (D-025). */
-export async function snapshot(tx: Tx, eventId: string, label: string, clock: Clock, final = false) {
+/** The snapshot itself, inside the caller's transaction; `final` makes it the close (D-025), `forClient` sends it for approval (D-028). */
+export async function snapshot(tx: Tx, eventId: string, label: string, clock: Clock, { final = false, forClient = false } = {}) {
   const lines = await tx.budgetLine.findMany({ where: { eventId }, orderBy: [{ category: 'asc' }, { description: 'asc' }], include: { vendor: { select: { name: true } } } });
   const frozen: FrozenLine[] = lines.map((l) => ({
     id: l.id, category: l.category, description: l.description, vendor: l.vendor?.name ?? null,
@@ -119,7 +119,7 @@ export async function snapshot(tx: Tx, eventId: string, label: string, clock: Cl
   const number = (await tx.budgetSnapshot.count({ where: { eventId } })) + 1;
   return tx.budgetSnapshot.create({
     data: {
-      eventId, number, label, final, takenAt: clock.now(), lines: frozen,
+      eventId, number, label, final, forClient, takenAt: clock.now(), lines: frozen,
       committedCents: total.committed, actualCents: total.actual, billableCents: total.billableCommitted,
     },
   });

@@ -12,6 +12,7 @@ import { publishAgenda } from '../src/agenda/publish';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
 import { addThreshold, createBlock, reserve } from '../src/attrition/attrition';
+import { decideBudget, issueClientLink } from '../src/budget/approval';
 import { addLine, takeSnapshot, updateLine } from '../src/budget/budget';
 import { addVendor, recordDoc, sendComplianceNags } from '../src/budget/compliance';
 import { addSchemaLine, createRfp, enterQuote, setQuantity, setRegistration } from '../src/rfp/rfp';
@@ -292,7 +293,11 @@ const lunch = await line('catering', 'Lunch, 420 covers × 2 days', 30_240, 'Lak
 await line('catering', 'Crew meals', 1_800, 'Lakeshore Catering', false);
 await line('decor', 'Stage florals', 2_600, 'Petal & Stem');
 await line('talent', 'Keynote honoraria', 25_000);
-await takeSnapshot(event.id, 'Client-approved v1', fixedClock(new Date(systemClock.now().getTime() - 21 * DAY)));
+// The client approved v1 (D-028), so the change order below is unapproved spend until they sign v2.
+const clientLink = await issueClientLink(event.id);
+const v1 = await takeSnapshot(event.id, 'Client-approved v1', fixedClock(new Date(systemClock.now().getTime() - 21 * DAY)), true);
+await decideBudget(clientLink, v1.id, { approved: true, signedBy: 'Dana Ruiz' }, fixedClock(new Date(systemClock.now().getTime() - 20 * DAY)));
+portalLinks.push(`Client budget approval: /portal/client/${clientLink}`);
 await updateLine(led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); // change order: second IMAG camera; deposit invoiced
 await updateLine(lunch.id, { actualCents: 15_120_00 });
 // The rain call: due 10:00 on day 2, anchored to the reception, so moving the
