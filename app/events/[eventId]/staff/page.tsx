@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/src/db';
 import { DayRole } from '@/src/generated/prisma/enums';
+import { describeShift, loadShifts, MIN_REST_MIN, staffConflicts } from '@/src/staffing/portfolio';
 import { assign, StaffingRefused } from '@/src/staffing/staffing';
 import { daysBetween, fromDbDate, fromHhmm, hhmm, shortDay } from '@/src/time';
 import { refusable } from '../refusable';
@@ -24,6 +25,8 @@ export default async function Staffing({ params, searchParams }: { params: Promi
   const staff = await prisma.staff.findMany({ orderBy: { name: 'asc' } });
   const days = daysBetween(fromDbDate(event.startDate), fromDbDate(event.endDate));
   const here = `/events/${eventId}/staff`;
+  const onOtherEvents = staffConflicts(await loadShifts([...new Set(event.staffing.map((a) => a.staffId))]))
+    .filter((c) => (c.a.eventId === eventId) !== (c.b.eventId === eventId));
 
   async function add(form: FormData) {
     'use server';
@@ -38,6 +41,14 @@ export default async function Staffing({ params, searchParams }: { params: Promi
     <main>
       <h1>{event.name} — staffing</h1>
       {error && <p role="alert">{error}</p>}
+      {onOtherEvents.length > 0 && (
+        <ul aria-label="Cross-event warnings">
+          {onOtherEvents.map((c) => {
+            const [here_, there] = c.a.eventId === eventId ? [c.a, c.b] : [c.b, c.a];
+            return <li key={`${c.a.id}-${c.b.id}`}>{event.staffing.find((a) => a.id === here_.id)?.staff.name}: {c.kind === 'overlap' ? 'overlaps' : `${hhmm(c.restMin)} rest next to`} {there.eventName} {describeShift(there)} ({MIN_REST_MIN / 60}h owed)</li>;
+          })}
+        </ul>
+      )}
       {days.map((day) => (
         <section key={day}>
           <h2>{shortDay(day)}</h2>

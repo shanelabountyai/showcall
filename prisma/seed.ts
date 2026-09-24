@@ -393,6 +393,12 @@ for (const [type, records] of [['Sales reps', 200], ['Regional managers', 26], [
   }
 }
 
+// Portfolio (P1-4, D-030): the TD wraps the kickoff at 23:00 CT and calls a
+// West Coast roadshow at 6:00 PT, which is 8:00 CT: 9h rest, a warning.
+const roadshow = await createEvent({ name: 'Northwind West Roadshow', clientName: 'Northwind Health Partners', timezone: 'America/Los_Angeles', startDate: addDays(s1, 2), endDate: addDays(s1, 2) });
+await assign({ staffId: staffId['Sam Okafor']!, eventId: kickoff.id, roomId: null, day: addDays(s1, 1), startMin: at(15), endMin: at(23), role: 'technical_director' });
+await assign({ staffId: staffId['Sam Okafor']!, eventId: roadshow.id, roomId: null, day: addDays(s1, 2), startMin: at(6), endMin: at(14), role: 'technical_director' });
+
 console.log(`Portal links (shown once; reissue from /events/${event.id}/content):\n  ${portalLinks.join('\n  ')}`);
 console.log(`Seeded ${event.name}: ${d1}–${d2}, ${grid.length} sessions, ${Object.keys(bureauPlan).length} speakers advanced, ${due.length} GO marks, ${reminders} reminders, ${nags} compliance nags, ${escalations} escalations. /events/${event.id}/live`);
 console.log(`Seeded ${kickoff.name}: ${s1}, one room block with an attrition decision due, a catering RFP with three quotes, ${nth} attendee records. /events/${kickoff.id}/rooms`);

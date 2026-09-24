@@ -841,3 +841,27 @@ the one vegan meal), import a registration export, or edit attendees.
 that no name or email reaches the rollup or the caterer's portal. The PRD's
 "shared module with Knotwork" was cut, because there is no Knotwork to share
 with.
+
+## Portfolio calendar and cross-event staff conflicts (P1-4, S-25)
+
+`/calendar` lists every event by date with its timezone and headcount. It
+also shows each conflict between events and the shifts of everyone working
+more than one event. The seed adds a West Coast roadshow the day after the
+kickoff. The technical director wraps the kickoff at 23:00 Chicago time and
+is called at 6:00 Los Angeles time: 9h of rest against 10h owed, flagged on
+the calendar and on both staff pages (D-030).
+
+**Defects found.** Staffing compared minute-of-day across events as if every
+event ran on one clock. That was harmless while the seed had one timezone.
+With two, it accepted a real double-booking (13:00–17:00 CT against
+10:00–13:00 PT) and refused a legitimate back-to-back pair. Overlaps are now
+checked as instants, including the day on either side, since a late West
+Coast shift overlaps an early Central shift the next morning.
+
+**What it deliberately does not do.** Price the warning, model travel time
+per venue pair, or make the daily cap timezone-aware (it counts the venue's
+calendar day).
+
+**Verdict.** Validated, with the hardest part moved. The PRD expected
+cross-event checking to be the hard problem, and it mostly existed since
+S-5. The real work was time: two events are comparable only as instants.

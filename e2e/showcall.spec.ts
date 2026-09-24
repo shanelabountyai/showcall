@@ -638,4 +638,15 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       expect(res!.headers()['cache-control']).toContain('no-store');
     });
   });
+
+  test.describe('portfolio calendar (S-25)', () => {
+    test('a turnaround across timezones is flagged, on the calendar and the event', async ({ page }) => {
+      await page.goto('/');
+      await page.getByRole('link', { name: 'Portfolio calendar' }).click();
+      const warnings = page.getByRole('list', { name: 'Staff conflicts' });
+      await expect(warnings).toContainText(/Sam Okafor.*9:00 rest, 10h owed.*Northwind Fall Sales Kickoff.*23:00 America\/Chicago.*Northwind West Roadshow.*6:00–14:00 America\/Los_Angeles/);
+      await page.getByRole('link', { name: 'Northwind West Roadshow' }).click();
+      await expect(page.getByRole('list', { name: 'Cross-event warnings' })).toContainText(/Sam Okafor: 9:00 rest next to Northwind Fall Sales Kickoff/);
+    });
+  });
 });

@@ -13,11 +13,11 @@ export async function resetDb() {
 
 let n = 0;
 
-export async function makeEvent(opts: { startDate?: LocalDate; endDate?: LocalDate } = {}) {
+export async function makeEvent(opts: { startDate?: LocalDate; endDate?: LocalDate; timezone?: string } = {}) {
   const i = ++n;
   return prisma.event.create({
     data: {
-      name: `Summit ${i}`, timezone: 'America/Chicago',
+      name: `Summit ${i}`, timezone: opts.timezone ?? 'America/Chicago',
       startDate: toDbDate(opts.startDate ?? '2026-10-13'), endDate: toDbDate(opts.endDate ?? '2026-10-14'),
       client: { create: { name: `Client ${i}` } },
     },

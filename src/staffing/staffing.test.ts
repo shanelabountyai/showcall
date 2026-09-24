@@ -19,6 +19,21 @@ describe('staffing', () => {
     expect(await assign(shift(tech.id, b.id, 720, 900))).toMatchObject({ eventId: b.id }); // back-to-back is fine
   });
 
+  it('compares shifts in real time across timezones, past midnight included', async () => {
+    const chi = await makeEvent();
+    const la = await makeEvent({ timezone: 'America/Los_Angeles' });
+    const tech = await makeStaff(1440);
+    await assign(shift(tech.id, chi.id, 780, 1020)); // 13:00–17:00 CT
+    // 10:00–13:00 PT is 12:00–15:00 CT: wall clocks miss it, the instants do not
+    await expect(assign(shift(tech.id, la.id, 600, 780))).rejects.toThrow(/already on Summit \d+ 13:00–17:00 America\/Chicago/);
+    const other = await makeStaff(1440);
+    await assign(shift(other.id, chi.id, 480, 720)); // 8:00–12:00 CT
+    await assign(shift(other.id, la.id, 600, 780)); // 12:00–15:00 CT: back-to-back, though the wall clocks look overlapping
+    // 22:00–23:30 PT on the 13th is 0:00–1:30 CT on the 14th
+    await assign(shift(other.id, la.id, 1320, 1410));
+    await expect(assign(shift(other.id, chi.id, 30, 180, '2026-10-14'))).rejects.toThrow(/already on Summit \d+ 22:00–23:30/);
+  });
+
   it('refuses past the daily cap, counted across events, and only that day', async () => {
     const [a, b] = await Promise.all([makeEvent(), makeEvent()]);
     const tech = await makeStaff(600);

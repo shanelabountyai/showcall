@@ -1,6 +1,7 @@
 import { prisma } from '../db';
 import type { DayRole } from '../generated/prisma/client';
-import { fromDbDate, hhmm, toDbDate, type LocalDate } from '../time';
+import { addDays, fromDbDate, hhmm, toDbDate, type LocalDate } from '../time';
+import { restBetween } from './portfolio';
 
 /** The assignment would double-book the person or run them past their day. Nothing was written. */
 export class StaffingRefused extends Error {}
@@ -12,7 +13,8 @@ export type AssignInput = {
 
 /**
  * Assign a day-of role. Capacity is the person's, not the event's: overlaps
- * and the daily minute cap are checked against every event that day. The
+ * are checked in real time against every event (each in its own timezone),
+ * and the daily minute cap against every event that day. The
  * staff row is locked so two producers booking the same person serialize.
  */
 export async function assign(input: AssignInput) {
@@ -27,11 +29,18 @@ export async function assign(input: AssignInput) {
     }
     if (roomId) await tx.room.findFirstOrThrow({ where: { id: roomId, eventId } });
 
-    const booked = await tx.assignment.findMany({ where: { staffId, day: toDbDate(day) }, include: { event: { select: { name: true } } } });
-    const clash = booked.find((a) => a.startMin < endMin && startMin < a.endMin);
+    // Neighbouring days too: in another timezone, yesterday's shift can overlap today's.
+    const near = await tx.assignment.findMany({
+      where: { staffId, day: { gte: toDbDate(addDays(day, -1)), lte: toDbDate(addDays(day, 1)) } },
+      include: { event: { select: { name: true, timezone: true } } },
+    });
+    const clash = near.find((a) => restBetween({ ...a, day: fromDbDate(a.day), timezone: a.event.timezone }, { day, startMin, endMin, timezone: event.timezone }) < 0);
     if (clash) {
-      throw new StaffingRefused(`${staff.name} is already on ${clash.event.name} ${hhmm(clash.startMin)}–${hhmm(clash.endMin)} (${clash.role})`);
+      const tz = clash.event.timezone === event.timezone ? '' : ` ${clash.event.timezone}`;
+      throw new StaffingRefused(`${staff.name} is already on ${clash.event.name} ${hhmm(clash.startMin)}–${hhmm(clash.endMin)}${tz} (${clash.role})`);
     }
+    // ponytail: the cap counts the venue-calendar day, so a cross-timezone day can run a few hours over; a rolling 24h if that bites
+    const booked = near.filter((a) => fromDbDate(a.day) === day);
     const minutes = booked.reduce((sum, a) => sum + a.endMin - a.startMin, endMin - startMin);
     if (minutes > staff.maxMinutesPerDay) {
       throw new StaffingRefused(`${staff.name} would work ${minutes} min on ${day}; their cap is ${staff.maxMinutesPerDay}`);

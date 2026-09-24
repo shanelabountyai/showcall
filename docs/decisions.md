@@ -807,3 +807,32 @@ across from registration so far, and the gap is shown rather than reconciled.
 Not done: importing a registration export, editing or removing an attendee,
 per-meal counts (breakfast vs gala), and a Knotwork shared module (Knotwork
 does not exist on disk, D-001).
+
+## D-030 · 2026-09-23 · Portfolio calendar: overlaps refused in real time, a short turnaround between events is a warning
+
+**Shane picked overlap plus turnaround** over overlaps only and over a
+per-venue travel matrix.
+
+**Shifts are compared as instants, each event in its own timezone.** Before
+this change, `assign` compared minute-of-day across events as if every event
+shared one wall clock. A Chicago shift from 13:00 to 17:00 and a Los Angeles
+shift from 10:00 to 13:00 (12:00 to 15:00 Chicago time) were both accepted,
+and back-to-back cross-timezone shifts were refused. `instantOf`
+(`src/time.ts`) converts a venue wall clock to an instant. `assign` now looks
+at the day before and after too, because a shift late in Los Angeles
+overlaps one after midnight in Chicago.
+
+**Turnaround is a warning, never a refusal (as in D-027).** A person moving
+between two different events with less than `MIN_REST_MIN` (10h) of rest is
+flagged on `/calendar` and on both events' staff pages. The rest counts real
+time, so a 23:00 CT wrap before a 6:00 PT call is 9h, not 7h. Two shifts on
+the same event are a split call and never raise a turnaround.
+
+**One constant, not a travel matrix.** Different events are treated as
+different venues. A crew member who is local to both venues gets a warning
+they can ignore.
+
+Not done: the daily cap still counts the venue-calendar day, so a
+cross-timezone day can run a few hours over (a rolling 24h would fix that);
+travel time per venue pair; and a month-grid view (the calendar is a
+by-date list).

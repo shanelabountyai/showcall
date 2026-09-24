@@ -54,3 +54,17 @@ export function daysBetween(start: LocalDate, end: LocalDate): LocalDate[] {
   for (let t = toDbDate(start).getTime(); t <= toDbDate(end).getTime(); t += 86_400_000) days.push(fromDbDate(new Date(t)));
   return days;
 }
+
+/**
+ * A venue wall-clock time as an instant, so shifts in different timezones can
+ * be compared. `min` may run past 1440 (a shift that ends after midnight).
+ */
+export function instantOf(day: LocalDate, min: number, timeZone: string): Date {
+  const wall = utcMidnight(day) + min * 60_000;
+  let t = wall;
+  for (let i = 0; i < 2; i++) { // twice settles a DST edge
+    const l = localNow(new Date(t), timeZone);
+    t += wall - (utcMidnight(l.day) + l.min * 60_000);
+  }
+  return new Date(t);
+}

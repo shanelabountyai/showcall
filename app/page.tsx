@@ -23,6 +23,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
   return (
     <main>
       <h1>Showcall</h1>
+      <p><a href="/calendar">Portfolio calendar</a></p>
       <ul>{events.map((e) => <li key={e.id}><a href={`/events/${e.id}/grid`}>{e.name}</a> — {e.client.name}</li>)}</ul>
       <h2>New event</h2>
       {error && <p role="alert">{error}</p>}

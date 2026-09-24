@@ -64,7 +64,7 @@ See D-012 for the reasoning kept out of this table; D-017 for S-10's.
 | S-22 | P1-1 crew work rules as data: breaks, meal-penalty and overtime warnings during run-sheet edits | ✅ |
 | S-23 | P1-6 client approval gates on budget and scope changes | ✅ |
 | S-24 | P1-7 dietary and accessibility rollups for catering (counts, never names) | ✅ |
-| S-25 | P1-4 portfolio calendar with cross-event staff conflicts | ⬜ |
+| S-25 | P1-4 portfolio calendar with cross-event staff conflicts | ✅ |
 | S-26 | P1-2 post-show asset distribution to attendees, consent-gated | ⬜ |
 
 Budget goes first because it is the sink: attrition exposure (S-13), RFP
