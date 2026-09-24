@@ -1,6 +1,6 @@
 # Showcall — demo script
 
-Synthetic data only. Port 4000. No user logins: roles are per-link and per-room. The live copy at https://showcall.labintelligence.co sits behind one shared HTTP Basic password (any username; the password is in the gitignored `.env.deploy.local`, `grep '^' .env.deploy.local | cut -d= -f1` shows the variable name). Uploads over 4.5 MB fail there.
+Synthetic data only. Port 4000. No user logins: roles are per-link and per-room. The live copy at https://showcall.labintelligence.co sits behind one shared HTTP Basic password (any username; the password is `DEMO_ACCESS_PASSWORD` in the gitignored `.env.deploy.local`). Uploads over 4.5 MB fail there.
 
 ## Setup (once)
 
