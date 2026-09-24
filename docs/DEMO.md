@@ -1,6 +1,6 @@
 # Showcall — demo script
 
-Synthetic data only. Port 4000. No logins: the app has no auth (roles are per-link and per-room).
+Synthetic data only. Port 4000. No user logins: roles are per-link and per-room. The live copy at https://showcall.labintelligence.co sits behind one shared HTTP Basic password (any username; the password is in the gitignored `.env.deploy.local`, `grep '^' .env.deploy.local | cut -d= -f1` shows the variable name). Uploads over 4.5 MB fail there.
 
 ## Setup (once)
 
@@ -9,7 +9,9 @@ npm run db:migrate:test && npm run db:seed:test   # local Postgres, showcall_tes
 npm run e2e:server                                # production build, served on :4000
 ```
 
-Open http://localhost:4000. Two events are seeded: **Northwind Leadership Summit** (agenda, live mode, content) and **Northwind Fall Sales Kickoff** (rooms, RFPs, budget).
+The seed prints four one-time portal links (Hollis Grant's content link, Avery Chen's recap, A1 Audio's crew link, the client budget link). Copy them, or reissue in the app; on the live site they were not kept, so reissue: content page, call sheets, budget, packages → Attendee recap links.
+
+Open http://localhost:4000. Three events are seeded (the third, Northwind West Roadshow, exists for the calendar stop). The two main ones: **Northwind Leadership Summit** (agenda, live mode, content) and **Northwind Fall Sales Kickoff** (rooms, RFPs, budget).
 
 ## Phase 3 story — "the money decisions" (Kickoff event, ~4 min)
 
@@ -45,6 +47,20 @@ Start from a fresh seed (`npm run db:seed:test`). The e2e sweep runs this story 
 | 5. Rebase | **Live** → **Rebase and re-issue call sheets** | "The run sheet was stale against v2. The rebase re-issues A1 Audio and Doors & Registration, the only sheets the keynote touches. Catering isn't on the list." |
 | 6. Rain call | **Contingency** → **Preview Rain: move to Ballroom A** → **Execute** | "Still open before its 10:00 decide-by, never escalated. One commit moves the reception to 17:30 in Ballroom A, the load-out follows it, $3,800 posts, and only Catering and Doors & Registration re-issue." |
 
+## Phase 5 — "the people outside the building" (~6 min)
+
+Start from a fresh seed. Portal links are the seed's printed ones, or reissued in the app.
+
+| Stop | Click | Say |
+|---|---|---|
+| 1. Overtime is a warning | Summit → **Contingency** → **Preview Rain: move to Ballroom A** → the **Work rules** list | "The later reception runs the door crew past the ten-hour straight-time day. The preview says by how many minutes, and warns rather than blocks: a producer can still make the call." |
+| 2. Crew portal | Open the A1 Audio crew link (`/portal/call/…`) | "A1 Audio sees only its own cues: walk-in music, mic swaps. Lunch service, Catering's cue, isn't there. **Confirm I have issue 1** and the producer's call sheets page flips to *receipt confirmed*. The link is a secret, and the page is no-store and noindex." |
+| 3. Client approval | Summit → **Budget** → **Client approval** | "The client approved snapshot 1 at $130,240.00. The LED change order is $18,000.00 to $19,850.00: $1,850.00 unapproved, and it blocks the close." Take a snapshot ticked *send to the client*, open its client link (`/portal/client/…`): the client sees their lines only, no crew meals, and a decline needs a reason. |
+| 4. Catering rollup | Kickoff → **RFPs** | "The caterer gets counts, never names: vegetarian 26, from 238 attendee records of 260 registered. 22 registered have no record, and the page says their needs are unknown rather than guessing." |
+| 5. Portfolio calendar | Home → **Portfolio calendar** | "Sam Okafor closes the Kickoff at 23:00 Chicago and opens the West Roadshow at 6:00 Los Angeles: 9 hours of rest, 10 owed. Shifts are compared as instants, so the timezone gap can't hide it." |
+| 6. Recap | Summit → **Packages** → **Attendees** | "Lucia Varga's recording is withheld, and it says why: she did not consent to recording. Owen Castellano's is released." |
+| 7. Attendee link | **Attendee recap links** → Avery Chen → **Reissue**, open it | "Avery's page lists session decks, plus Owen's recording. Lucia's deck is there, her recording isn't. Consent is checked again on every download, so a withdrawal takes effect before any rebuild." |
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -53,11 +69,14 @@ Start from a fresh seed (`npm run db:seed:test`). The e2e sweep runs this story 
 | Attrition alert already cleared, no Release button | The e2e sweep (or an earlier run) already released: re-seed |
 | Award button missing | Already awarded: re-seed |
 | Rain call shows decided, no Preview links | Already executed (the e2e sweep executes it): re-seed |
+| Portal link 404s | Links are shown once and a reseed invalidates them: reissue from the app (see Setup) |
+| Rain-call work-rule warning is missing | The rain call was already executed: re-seed |
+| Live site returns 401 | Basic auth: any username, the password from `.env.deploy.local` |
 | Port 4000 busy | `lsof -ti :4000 \| xargs kill` |
 
 ## Concede before you're asked
 
-- Synthetic data; no auth; nothing deployed.
+- Synthetic data; no user accounts (per-link roles, one shared password on the live site); the live copy holds the demo on purpose.
 - The rain call is executed before its decide-by, not watched ticking over: the app reads the real clock, and the cue is tomorrow at 10:00. Unit tests cover the deadline escalation on an injected clock.
 - Releasing rooms posts nothing to the budget by design (D-018): only accepted exposure and awards do.
 - Attrition thresholds net against each other, so the block is never charged twice for the same room-night.
