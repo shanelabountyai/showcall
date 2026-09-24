@@ -17,3 +17,9 @@ Closure owes (CLAUDE.md "Definition of done"):
 3. LinkedIn posts into the Ledger. Mine WRITEUP "Defects found": consent checked at serve time, not only at build time (S-26);
    comparing shifts as instants (S-25).
 Record every artifact URL in docs/RELEASE_NOTES.md or here.
+
+Live: https://showcall.labintelligence.co (D-032). HTTP Basic, any username; the password is in the gitignored
+`.env.deploy.local` and is Sensitive in Vercel (cannot be read back). Portal links for the demo: reissue them in the app
+(content page, call sheets, budget, packages → Attendee recap links), since the production seed's printed links were not kept.
+Production DB is Neon `showcall` (restless-term-77017763); a reseed is `SHOWCALL_ALLOW_CLOUD_DB=1` with the direct URL from
+`neonctl connection-string`, and it wipes first. Uploads over 4.5 MB fail on Vercel. DEMO.md and the brief should use the live URL.
