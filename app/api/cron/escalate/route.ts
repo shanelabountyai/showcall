@@ -2,8 +2,8 @@ import { systemClock } from '@/src/clock';
 import { escalateAll } from '@/src/contingency/contingency';
 
 /**
- * The escalation sweep (D-022), for a scheduler to call every minute
- * (vercel.json). Idempotent: it sends only what is owed now, once per
+ * The escalation sweep (D-022). Deployed, Vercel calls it hourly (vercel.json,
+ * D-032: a per-minute call would keep the free Neon compute awake). Idempotent: it sends only what is owed now, once per
  * deadline. Vercel sends CRON_SECRET as a bearer token; without one set, only
  * a local server answers.
  */

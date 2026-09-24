@@ -869,3 +869,29 @@ time and serve time.
 Not done: sending the links (there is no email seam; the producer copies
 them), per-session recording validation rules, and streaming large
 recordings (bytes still live in Postgres under the 25 MB ceiling, SEC-07).
+
+## D-032 · 2026-09-24 · Deployed demo at showcall.labintelligence.co behind a shared password
+
+**Shane's picks: a shared demo password, portals behind it too, deploy
+before closure.** `proxy.ts` requires HTTP Basic against
+`DEMO_ACCESS_PASSWORD` (any username, compared in constant time) on every
+route: pages, server actions, file routes and portals. It follows
+rent.labintelligence.co (rental D-257). On Vercel, a missing password fails
+closed with a 503. Off Vercel (dev, e2e) there is no gate. The cron path is
+the only exemption, because it carries its own `CRON_SECRET`. Putting the
+portals behind the password keeps SEC-07's unthrottled upload off the open
+internet. SEC-01 proper (users, a guard on each action) stays open: anyone
+with the password is a producer.
+
+**The production database holds the demo on purpose.** It is Neon project
+`showcall` (us-east-2), migrated and seeded from a laptop with
+`SHOWCALL_ALLOW_CLOUD_DB=1` typed on purpose. The runtime carries the same
+flag. Synthetic data only, as everywhere in this repo.
+
+**The deployed cron runs hourly, not every minute (D-022).** A per-minute
+call keeps a free-plan Neon compute awake around the clock, which is more
+than the free allowance. Escalations land within the hour instead of within
+the minute.
+
+Known ceiling: Vercel caps a request body at 4.5 MB, so uploads above that
+fail on the deployed site even though the app allows 25 MB.
