@@ -48,6 +48,7 @@ model Event {
   blocks          RoomBlock[]
   registrations   Registration[]
   attendees       Attendee[]
+  recordings      SessionRecording[]
   rfps            Rfp[]
   plans           ContingencyPlan[]
   venue           Venue?                @relation(fields: [venueId], references: [id])
@@ -830,8 +831,43 @@ model Attendee {
   name         String
   email        String
   needs        AttendeeNeed[]
+  /// The post-show recap link (P1-2, D-031). Null = never issued or revoked.
+  recapTokenHash String?        @unique
+  downloads      RecapDownload[]
 
   @@unique([eventId, email])
+}
+
+/// A session's recording, uploaded by production after the show (P1-2, D-031).
+/// Append-only (trigger); the highest number per session is the one that ships.
+/// `sessionId` is the published snapshot's id, not a foreign key: the draft
+/// grid can drop a session that a published agenda still carries.
+model SessionRecording {
+  id         String   @id @default(cuid())
+  event      Event    @relation(fields: [eventId], references: [id])
+  eventId    String
+  sessionId  String
+  number     Int
+  filename   String
+  mimeType   String
+  bytes      Bytes
+  sha256     String
+  uploadedAt DateTime
+
+  @@unique([sessionId, number])
+  @@index([eventId])
+}
+
+/// One file fetched through a recap link — who took what, and when.
+model RecapDownload {
+  id         String   @id @default(cuid())
+  attendee   Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+  attendeeId String
+  /// A ContentVersion id or a SessionRecording id, as the manifest names it.
+  fileId     String
+  at         DateTime
+
+  @@index([attendeeId])
 }
 
 model AttendeeNeed {

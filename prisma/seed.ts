@@ -8,7 +8,8 @@
  */
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { saveSession } from '../src/agenda/grid';
-import { publishAgenda } from '../src/agenda/publish';
+import { publishAgenda, type PublicSession } from '../src/agenda/publish';
+import { addRecording, issueRecapLink } from '../src/content/recap';
 import { advance, LIFECYCLE, setConsent, setProfile } from '../src/bureau/bureau';
 import { issueCallSheets } from '../src/callsheet/callsheet';
 import { addThreshold, createBlock, reserve } from '../src/attrition/attrition';
@@ -100,7 +101,10 @@ const bureauPlan: Record<string, {
   'Ravi Menon': { target: 'contracted', honorariumCents: 275_00 },
   'Hollis Grant': { target: 'content_complete', honorariumCents: 400_00, bio: 'Chief value officer, twelve years leading payer-provider partnerships.' },
   'Nadia Farouk': { target: 'rehearsed', honorariumCents: 450_00, bio: 'VP of ambient care technology; frequent keynote on interoperability.', rehearsal: 'Ballroom A' },
-  'Owen Castellano': { target: 'showed', honorariumCents: 320_00, bio: 'Director of supply chain resilience for a five-state health system.', rehearsal: 'Salon B' },
+  'Owen Castellano': {
+    target: 'showed', honorariumCents: 320_00, bio: 'Director of supply chain resilience for a five-state health system.', rehearsal: 'Salon B',
+    consent: { recordSession: true, distributeDeck: true, publishVideo: true },
+  },
   'Lucia Varga': {
     target: 'released', honorariumCents: 500_00, bio: 'Board member and governance advisor across three regional health systems.', rehearsal: 'Salon C',
     consent: { recordSession: true, distributeDeck: true, publishVideo: false },
@@ -215,9 +219,22 @@ await issueCallSheets(event.id, systemClock);
 // owes the escalation step — the clock is injected exactly so this is possible.
 const reminders = await sendDueReminders(event.id, fixedClock(new Date(systemClock.now().getTime() - 28 * DAY))).catch(() => 0);
 
+// Post-show (P1-2, D-031): a recording of Owen's session (he said yes to everything)
+// and of Lucia's (recorded, but no to publishing video — so hers is withheld),
+// and a few attendee records on this event to hold recap links.
+const published = (await prisma.agendaVersion.findFirstOrThrow({ where: { eventId: event.id }, orderBy: { number: 'desc' } })).snapshot as PublicSession[];
+for (const who of ['Owen Castellano', 'Lucia Varga']) {
+  const s = published.find((x) => x.speakers.includes(who))!;
+  await addRecording(event.id, s.id, { filename: `${s.title.replace(/\W+/g, '-').toLowerCase()}.mp4`, mimeType: 'video/mp4', bytes: new Uint8Array(64) }, systemClock);
+}
+await setRegistration(event.id, 'Attendees', 3, 400);
+for (const name of ['Avery Chen', 'Jordan Blake', 'Sasha Ruiz']) await addAttendee(event.id, { attendeeType: 'Attendees', name, email: `${name.replace(' ', '.').toLowerCase()}@example.test`, needIds: [] });
+const avery = await prisma.attendee.findFirstOrThrow({ where: { eventId: event.id, name: 'Avery Chen' } });
+
 // Every package built once, so the demo starts current and a late override shows the stale flag.
 for (const r of Object.values(room)) await buildPackage(event.id, { audience: 'room', roomId: r.id }, systemClock);
 await buildPackage(event.id, { audience: 'attendees' }, systemClock);
+portalLinks.push(`Attendee recap (Avery Chen): /portal/recap/${await issueRecapLink(event.id, avery.id)}`);
 
 // Staff and day-of roles. Stage managers own a room; the producer and TD are event-wide.
 const crew: [string, number, 'producer' | 'stage_manager' | 'technical_director' | 'crew', keyof typeof room | null, number, number][] = [

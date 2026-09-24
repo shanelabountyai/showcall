@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 
-export type Issued = { url: string; for: string } | { error: string } | null;
+export type Issued = { url: string; for: string } | { links: { url: string; for: string }[] } | { error: string } | null;
 
 /**
  * Issue (or reissue) a portal link and show it once (SEC-04). The raw token
@@ -21,6 +21,12 @@ export function IssueLink({ action, fields, label }: { action: (prev: Issued, fo
           Portal link for {state.for} — copy it now, it will not be shown again: <code>{state.url}</code>{' '}
           <a href={state.url} rel="noreferrer">open</a>
         </p>
+      )}
+      {state && 'links' in state && (
+        <div role="status">
+          <p>{state.links.length ? `${state.links.length} links — copy them now, they will not be shown again:` : 'Everyone already has a link.'}</p>
+          <ul>{state.links.map((l) => <li key={l.url}>{l.for}: <code>{l.url}</code></li>)}</ul>
+        </div>
       )}
     </form>
   );

@@ -865,3 +865,28 @@ calendar day).
 **Verdict.** Validated, with the hardest part moved. The PRD expected
 cross-event checking to be the hard problem, and it mostly existed since
 S-5. The real work was time: two events are comparable only as instants.
+
+## Post-show distribution to attendees (P1-2, S-26)
+
+The packages page now carries session recordings and a recap link per
+attendee. The attendee package holds locked decks, speakers' videos and each
+session's latest recording, and every entry goes through the consent gate. A
+recording needs "record session" and "publish video" from every speaker on
+it (D-031). The seed records Owen Castellano's session (yes to everything,
+released) and Lucia Varga's (no to video, withheld and named), and prints a
+recap link for one attendee.
+
+**Defects found.** The gate held at build time only. The built package was
+stored, so if the producer had shipped links, a speaker who withdrew consent
+after the build would have stayed downloadable until someone thought to
+rebuild. A link now serves the built package intersected with the manifest
+built now, so a withdrawal takes effect immediately. A second gap: the
+consent gate assumed one owner per asset, which a panel's recording breaks.
+
+**What it deliberately does not do.** Send email, stream large files, or
+validate recordings the way decks are validated.
+
+**Verdict.** Validated, and changed. The producer-review line said "gated
+per-speaker consent". The build showed that consent has to be checked
+*where the file is served*, not only where the package is built, and that a
+shared recording needs every owner's yes.

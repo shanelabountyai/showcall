@@ -836,3 +836,36 @@ Not done: the daily cap still counts the venue-calendar day, so a
 cross-timezone day can run a few hours over (a rolling 24h would fix that);
 travel time per venue pair; and a month-grid view (the calendar is a
 by-date list).
+
+## D-031 · 2026-09-23 · Post-show distribution: session recordings under both flags, a link per attendee, consent re-checked on every download
+
+**Shane picked session recordings gated on both flags** over "publish video"
+alone and over decks and speaker videos only. Production uploads a recording
+per published session (`SessionRecording`, append-only; the highest number
+ships). A recording that reaches attendees is a published video of the
+session, so it needs "record session" *and* "publish video", from **every**
+speaker on the session. One holdout on a panel withholds the recording, and a
+session with no speakers is withheld because nobody can consent for it.
+`releasable` now takes the owners and the kind per item (`withheldAll`).
+Speakers' locked videos join the attendee package under "publish video".
+Recordings stay out of room packages: playback happens before the show.
+
+**Shane picked a link per attendee** over one shared link. Links are issued
+in bulk to attendees who have none (existing links are left alone), and can
+be reissued or revoked one by one. Every download is logged against the
+attendee (`RecapDownload`). A recap link lives 90 days after the show, not
+the crew portal's 7, because it is used after the show by definition.
+
+**What a link serves is the last *built* package intersected with the
+manifest built *now*.** The built package is what the producer sent. The
+current manifest has just passed the consent gate. A speaker who withdraws
+consent after the build is gone from every recap page and every download at
+once, without waiting for a rebuild. A newly released asset, on the other
+hand, waits for the producer's rebuild, as D-016's stale flag intends. The
+download route resolves the file through the same intersection, so no URL
+serves a file that is not on the page. Hard rule 6 now holds at both build
+time and serve time.
+
+Not done: sending the links (there is no email seam; the producer copies
+them), per-session recording validation rules, and streaming large
+recordings (bytes still live in Postgres under the 25 MB ceiling, SEC-07).

@@ -17,5 +17,5 @@ export function newToken() {
   return { token, hash: hashToken(token) };
 }
 
-export const linkLive = (event: { endDate: Date; timezone: string }, clock: Clock) =>
-  localNow(clock.now(), event.timezone).day <= addDays(fromDbDate(event.endDate), LINK_GRACE_DAYS);
+export const linkLive = (event: { endDate: Date; timezone: string }, clock: Clock, graceDays = LINK_GRACE_DAYS) =>
+  localNow(clock.now(), event.timezone).day <= addDays(fromDbDate(event.endDate), graceDays);

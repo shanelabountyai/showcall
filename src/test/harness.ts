@@ -42,10 +42,10 @@ export async function makeStaff(maxMinutesPerDay = 720) {
 }
 
 /** A deck version with one validation run, written directly — for guard tests, not the pipeline. */
-export async function makeDeck(speakerId: string, outcome: ValidationOutcome, at = new Date('2026-10-01T15:00:00Z')) {
+export async function makeDeck(speakerId: string, outcome: ValidationOutcome, at = new Date('2026-10-01T15:00:00Z'), kind: 'deck' | 'video' = 'deck') {
   const speaker = await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } });
-  const deck = await prisma.deliverable.findFirst({ where: { speakerId, kind: 'deck' } })
-    ?? await prisma.deliverable.create({ data: { eventId: speaker.eventId, speakerId, kind: 'deck', label: 'Main deck' } });
+  const deck = await prisma.deliverable.findFirst({ where: { speakerId, kind } })
+    ?? await prisma.deliverable.create({ data: { eventId: speaker.eventId, speakerId, kind, label: kind === 'deck' ? 'Main deck' : 'Walk-in video' } });
   const number = (await prisma.contentVersion.count({ where: { deliverableId: deck.id } })) + 1;
   return prisma.contentVersion.create({
     data: {

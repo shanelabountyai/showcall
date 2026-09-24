@@ -188,6 +188,28 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     });
   });
 
+  test.describe('post-show recap (S-26)', () => {
+    test('an attendee sees what consent releases: Owen\'s recording, not Lucia\'s; the producer sees why', async ({ page }) => {
+      await page.goto(`/events/${eventId}/packages`);
+      await expect(page.getByRole('region', { name: /^Attendees/ })).toContainText('Withheld: Session recording — Lucia Varga did not consent to recording');
+      const avery = page.getByRole('region', { name: 'Attendee recap links' }).getByRole('row').filter({ hasText: 'Avery Chen' });
+      await expect(avery).toContainText('issued');
+      await avery.getByRole('button', { name: 'Reissue' }).click();
+      const url = await avery.getByRole('status').locator('code').textContent();
+
+      await page.goto(url!);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText('session materials');
+      const rows = page.getByRole('table', { name: 'Session materials' }).getByRole('row');
+      const owen = rows.filter({ hasText: 'Owen Castellano' }).filter({ hasText: 'Session recording' });
+      await expect(owen).toHaveCount(1);
+      await expect(rows.filter({ hasText: 'Lucia Varga' }).filter({ hasText: 'Session recording' })).toHaveCount(0);
+      const res = await page.request.get((await owen.getByRole('link').getAttribute('href'))!);
+      expect(res.status()).toBe(200);
+      expect(res.headers()['content-disposition']).toMatch(/^attachment/);
+      expect((await page.request.get(`${url}/file/not-a-file`)).status()).toBe(404);
+    });
+  });
+
   test.describe('chase dashboard (S-10)', () => {
     test('deadlines derive from the agenda, and the cadence sends each step once', async ({ page }) => {
       await page.goto(`/events/${eventId}/chase`);

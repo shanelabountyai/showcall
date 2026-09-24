@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PublicSession } from '../agenda/publish';
-import { releasable } from '../bureau/consent';
+import { releasable, type AssetKind } from '../bureau/consent';
 import type { Clock } from '../clock';
 import { prisma, type Tx } from '../db';
 import type { Audience } from '../generated/prisma/enums';
@@ -11,8 +11,9 @@ import { ContentRefused } from './pipeline';
  * one room: each published session's speakers' locked decks and videos, in
  * running order, with a named gap for anything not locked. No consent check —
  * playback is the presenter's own session, not distribution. An *attendees*
- * package is the post-show deck bundle, and every entry passes `releasable`
- * first: a withheld deck is not in the manifest at all (hard rule 6).
+ * package is the post-show bundle — locked decks and videos, and each
+ * session's latest recording (D-031) — and every entry passes `releasable`
+ * first: a withheld asset is not in the manifest at all (hard rule 6).
  *
  * A package is stale by content (D-009): stale when the manifest built now
  * has another checksum than the last build. Only a rebuild clears it.
@@ -40,20 +41,28 @@ export async function currentManifest(eventId: string, scope: Scope, db: Tx = pr
   }
   sessions = [...sessions].sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin || a.room.localeCompare(b.room));
 
-  const kinds = scope.audience === 'room' ? ['deck', 'video'] as const : ['deck'] as const;
   // Speakers as published, so a draft swap does not reach a package until it is published.
   const found = await db.speaker.findMany({
     where: { eventId, id: { in: sessions.flatMap((s) => s.speakerIds ?? []) } },
     include: {
       deliverables: {
-        where: { kind: { in: [...kinds] } }, orderBy: { label: 'asc' },
+        where: { kind: { in: ['deck', 'video'] } }, orderBy: { label: 'asc' },
         include: { locks: { orderBy: { number: 'desc' }, take: 1, include: { version: { select: { id: true, number: true, filename: true, sha256: true } } } } },
       },
     },
   });
   const byId = new Map(found.map((sp) => [sp.id, sp]));
+  // Latest recording per session; recordings are post-show, so only attendees get them.
+  const recordings = new Map<string, { id: string; number: number; filename: string; sha256: string }>();
+  if (scope.audience === 'attendees') {
+    const rows = await db.sessionRecording.findMany({
+      where: { eventId, sessionId: { in: sessions.map((s) => s.id) } }, orderBy: { number: 'desc' },
+      select: { id: true, sessionId: true, number: true, filename: true, sha256: true },
+    });
+    for (const r of rows) if (!recordings.has(r.sessionId)) recordings.set(r.sessionId, r);
+  }
 
-  const entries: (Entry & { speakerOf: (typeof found)[number] })[] = [];
+  const entries: (Entry & { owners: (typeof found)[number][] })[] = [];
   const gaps: Gap[] = [];
   for (const s of sessions) {
     // Snapshots published before D-016 carry no speaker ids, and contribute nothing.
@@ -64,19 +73,26 @@ export async function currentManifest(eventId: string, scope: Scope, db: Tx = pr
       entries.push({
         sessionId: s.id, day: s.day, startMin: s.startMin, session: s.title, room: s.room,
         speaker: sp.name, label: d.label, kind: d.kind, versionId: v.id, version: v.number, filename: v.filename, sha256: v.sha256,
-        speakerOf: sp,
+        owners: [sp],
       });
     }
+    const r = recordings.get(s.id);
+    if (r) entries.push({
+      sessionId: s.id, day: s.day, startMin: s.startMin, session: s.title, room: s.room,
+      speaker: speakers.map((sp) => sp.name).join(', ') || 'no speakers', label: 'Session recording', kind: 'recording',
+      versionId: r.id, version: r.number, filename: r.filename, sha256: r.sha256,
+      owners: speakers,
+    });
   }
-  const strip = ({ speakerOf: _, ...e }: (typeof entries)[number]): Entry => e;
+  const strip = ({ owners: _, ...e }: (typeof entries)[number]): Entry => e;
 
   if (scope.audience === 'room') {
     const manifest: Manifest = { entries: entries.map(strip), gaps };
     return { agendaVersion: agenda.number, manifest, sha256: checksum(manifest), withheld: [] };
   }
-  // Attendees: one copy of each deck, then the consent gate. Unlocked decks are simply not ready.
+  // Attendees: one copy of each file, then the consent gate. Unlocked files are simply not ready.
   const unique = entries.filter((e, i) => entries.findIndex((x) => x.versionId === e.versionId) === i);
-  const gate = releasable(unique, (e) => e.speakerOf, 'deck');
+  const gate = releasable(unique, (e) => e.owners, (e) => e.kind as AssetKind);
   const manifest: Manifest = { entries: gate.released.map(strip), gaps: [] };
   const withheld = gate.withheld.map(({ item, reason }) => ({ speaker: item.speaker, label: item.label, reason }));
   return { agendaVersion: agenda.number, manifest, sha256: checksum(manifest), withheld };
