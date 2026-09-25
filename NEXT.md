@@ -1,13 +1,12 @@
 # Next
 
-**Project closure, items 1 and 2 of 3 done.** Exec brief: https://claude.ai/artifact/7s4pKXUT5Fanza7ZUvXBbE (private until shared; no screenshots, the app has no capture spec). DEMO.md has the Phase 5 stops (crew portal, overtime warning, client approval,
-catering rollup, portfolio calendar, recap), each checked against a running production build on a fresh seed.
-Model: Sonnet (docs, posts).
+**Project closure: all 3 deliverables done (2026-09-25).**
 
-Owes (CLAUDE.md "Definition of done"):
-3. LinkedIn posts into the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i). Mine WRITEUP "Defects found":
-   consent checked at serve time, not only build time (S-26); comparing shifts as instants (S-25).
-Record every artifact URL in docs/RELEASE_NOTES.md or here.
+1. `docs/DEMO.md` — every stop checked against a running production build on a fresh seed.
+2. Exec brief, *Showcall in Brief*: https://claude.ai/artifact/7s4pKXUT5Fanza7ZUvXBbE (private until shared; no screenshots, the app has no capture spec).
+3. LinkedIn posts in the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i): posts 60 (Scale, time zones as instants, S-25), 61 (Impact, consent checked at serve time, S-26), 62 (Impact, approval check per line not total, S-23). Project chip "Showcall" added. Each needs an image and is slotted so no adjacent drafts share a pillar. The Ledger's project chip list had no Showcall row before this.
+
+Nothing left in the backlog. Pick a new project or item; port 4200 is the next free one (add its row to the global table in the same commit as its config).
 
 Live: https://showcall.labintelligence.co (D-032). HTTP Basic, any username; password `DEMO_ACCESS_PASSWORD` in the
 gitignored `.env.deploy.local` (Sensitive in Vercel, cannot be read back). Portal links on the live site: reissue in the app.
