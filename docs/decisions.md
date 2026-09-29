@@ -895,3 +895,12 @@ the minute.
 
 Known ceiling: Vercel caps a request body at 4.5 MB, so uploads above that
 fail on the deployed site even though the app allows 25 MB.
+
+## D-033 · 2026-09-29 · Vercel auto-deploy off (cost review, every project)
+
+`vercel.json` sets `git.deploymentEnabled: false`; a `main-manual` Deploy Hook
+(`https://api.vercel.com/v1/integrations/deploy/prj_xycSSZBV4ODv8EMOOjkAHb78v5p6/I2h6ZIAYAw`,
+POST to deploy `main`) replaces push-to-deploy. Build minutes were 98%+ of Vercel usage
+account-wide, run-rate over the $20 Pro allocation. A push no longer deploys — trigger
+the hook deliberately. **Restore:** delete the `git` key in `vercel.json`; trigger is
+this project needing continuous preview/prod again.
