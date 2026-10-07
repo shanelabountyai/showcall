@@ -904,3 +904,17 @@ POST to deploy `main`) replaces push-to-deploy. Build minutes were 98%+ of Verce
 account-wide, run-rate over the $20 Pro allocation. A push no longer deploys — trigger
 the hook deliberately. **Restore:** delete the `git` key in `vercel.json`; trigger is
 this project needing continuous preview/prod again.
+
+## D-034 · 2026-10-07 · Escalation cron hourly to daily, and the database unpinned from 1 CU (Neon cost)
+
+Shane chose this from a Neon usage review: the organisation was at $16.32 of $20 a week
+into October. This project's share was 13.7 compute hours, all from the hourly cron
+waking a database fixed at 1 CU for five minutes each time. Baseline to check against:
+about 2.1 compute hours a day before the change.
+
+- `vercel.json`: `/api/cron/escalate` runs `0 14 * * *`. **Restore:** `0 * * * *`, when the
+  demo has to show an escalation within the hour, or the project takes real users.
+- Neon endpoint `ep-calm-wind-b5bnk5tv`: minimum 0.25 CU, maximum still 1. **Restore:**
+  minimum 1, if cold queries are too slow in a demo.
+
+Takes effect on the next production deployment (D-033: the `main-manual` hook).

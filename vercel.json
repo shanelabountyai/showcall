@@ -8,7 +8,7 @@
   "crons": [
     {
       "path": "/api/cron/escalate",
-      "schedule": "0 * * * *"
+      "schedule": "0 14 * * *"
     }
   ]
 }
