@@ -1134,3 +1134,8 @@ If L1.0 (b) finds `EventSource` re-prompts behind HTTP Basic, the fallback is th
 | O-5 | Neon while a view is open | **Accept** compute awake while any stream is open. Hidden tabs disconnect. | Measured in S-31 against D-034's baseline. If over, raise the poll to 2 s or move to C. |
 | O-6 | Who may edit a row | **Producer or stage manager assigned to the event**, by "Editing as" (D-044) | Could be producers only, or anyone with the password |
 | O-7 | Model per item | **Opus** for S-27 (triggers, seq) and S-29 (stream, catch-up); Sonnet for S-28's UI and S-30's tests, per D-005's split | Shane's pick, as D-005 was |
+
+**Confirmed 2026-10-19 by Shane:** O-1 to O-7 all keep their defaults (A: SSE + seq poll;
+reject-and-refresh per row; issued sheets only, tick off; 1000 ms / 280 000 ms / 300 s;
+Neon awake while a stream is open; producer or SM assigned to the event; Opus for S-27/S-29,
+Sonnet for S-28/S-30). O-4 and O-5 are revisited with the S-31 measurements.
