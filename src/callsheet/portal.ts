@@ -40,6 +40,11 @@ async function roleOf(token: string, clock: Clock, db?: Tx) {
   return role && linkLive(role.event, clock) ? role : null;
 }
 
+/** The live link's event, or null: what a crew stream re-checks on every poll (D-040). */
+export async function crewLinkEvent(token: string, clock: Clock) {
+  return (await roleOf(token, clock))?.eventId ?? null;
+}
+
 /** What the portal page shows. Never the live projection: only what was issued. `db` reads it inside a live frame's snapshot (D-038). */
 export async function resolveCrewPortal(token: string, clock: Clock, db?: Tx) {
   const role = await roleOf(token, clock, db);
