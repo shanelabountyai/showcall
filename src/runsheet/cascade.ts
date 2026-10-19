@@ -16,8 +16,10 @@ import { diffTimings, resolveCues, type CueSpec, type Moved, type Problem, type 
  * version. A change that leaves any problem is refused whole, so fixing a
  * compression and the rebase that caused it land together or not at all.
  */
-export type CueEdit = { cueId: string; roomId?: string } & Partial<Omit<CueSpec, 'id'>>;
-export type Change = { rebase?: boolean; edits?: CueEdit[] };
+/** `rev` is the row revision the editor loaded (D-039); a commit is refused with `RowChanged` when the row has moved since. */
+export type CueEdit = { cueId: string; roomId?: string; rev?: number } & Partial<Omit<CueSpec, 'id'>>;
+/** `actor` is "Editing as" (D-044): recorded on the change log by the trigger, never checked here. */
+export type Change = { rebase?: boolean; edits?: CueEdit[]; actor?: string };
 /** `warnings` are crew work rules (D-027): shown, never refused. `isNew` means this change caused it. */
 export type CascadeResult = { agendaVersion: number; moved: Moved[]; problems: Problem[]; warnings: (CrewWarning & { isNew: boolean })[] };
 
@@ -33,6 +35,20 @@ export class CascadeChanged extends Error {
   constructor(readonly result: CascadeResult) { super('The run sheet changed since the preview; preview again'); }
 }
 
+/** A cue row as the editor shows it: its spec, its room and its revision. */
+export type CueRowState = CueSpec & { roomId: string; rev: number };
+
+/**
+ * Someone else wrote this row since the editor loaded it (D-039). Nothing was
+ * written. `current` is the row now; `by` and `at` come from the last change-log
+ * entry that touched it ('' and null if there is none).
+ */
+export class RowChanged extends Error {
+  constructor(readonly cueId: string, readonly current: CueRowState, readonly by: string, readonly at: Date | null) {
+    super(`"${current.label}" was changed${by ? ` by ${by}` : ''} since you opened it; your edit was not saved`);
+  }
+}
+
 class Rollback extends Error { constructor(readonly result: CascadeResult) { super('preview'); } }
 
 async function sessionsAt(tx: Tx, eventId: string, number: number) {
@@ -43,7 +59,7 @@ async function sessionsAt(tx: Tx, eventId: string, number: number) {
 
 const cuesOf = (tx: Tx, eventId: string) => tx.cue.findMany({ where: { eventId }, orderBy: { id: 'asc' }, include: { room: true, load: true } });
 type CueRow = Awaited<ReturnType<typeof cuesOf>>[number];
-const toSpec = ({ eventId: _, roomId: __, room: ___, load: ____, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
+const toSpec = ({ eventId: _, roomId: __, room: ___, load: ____, rev: _____, day, ...c }: CueRow): CueSpec => ({ ...c, day: day && fromDbDate(day) });
 
 /**
  * Timings carry their room, so a move that changes only the room — a rain call — is still a move the preview shows.
@@ -74,6 +90,20 @@ export async function lockEvent(tx: Tx, eventId: string) {
   return row.runSheetVersion;
 }
 
+/** Under the event lock, before the write: the row is still at the revision the editor loaded, or `RowChanged`. */
+async function checkRev(tx: Tx, eventId: string, cueId: string, rev: number) {
+  const row = await tx.cue.findFirst({ where: { id: cueId, eventId }, include: { room: true, load: true } });
+  if (!row || row.rev === rev) return;
+  const last = await tx.showChange.findFirst({ where: { eventId, kinds: { has: `cue:${cueId}` } }, orderBy: { seq: 'desc' }, select: { actor: true, at: true } });
+  throw new RowChanged(cueId, { ...toSpec(row), roomId: row.roomId, rev: row.rev }, last?.actor ?? '', last?.at ?? null);
+}
+
+/** Every cue row of the event with its revision, for the row editor. */
+export async function cueRows(eventId: string, db?: Tx): Promise<CueRowState[]> {
+  const rows = await cuesOf(db ?? prisma, eventId);
+  return rows.map((r) => ({ ...toSpec(r), roomId: r.roomId, rev: r.rev }));
+}
+
 const dbDay = (day: string | null) => (day === null ? null : toDbDate(day));
 const cueData = ({ day, ...rest }: Partial<Omit<CueSpec, 'id'>>) => ({ ...rest, ...(day !== undefined && { day: dbDay(day) }) });
 
@@ -84,6 +114,8 @@ async function applyChange(eventId: string, change: Change, expected?: Moved[], 
   try {
     return await prisma.$transaction(async (tx) => {
       const pinned = await lockEvent(tx, eventId);
+      // Read by the change-log trigger for this transaction only (D-044).
+      if (change.actor !== undefined) await tx.$queryRaw`SELECT set_config('showcall.actor', ${change.actor}, true)`;
       const before = await resolveAt(tx, eventId, pinned);
 
       let version = pinned;
@@ -93,7 +125,8 @@ async function applyChange(eventId: string, change: Change, expected?: Moved[], 
         version = last.number;
         await tx.event.update({ where: { id: eventId }, data: { runSheetVersion: version } });
       }
-      for (const { cueId, ...patch } of change.edits ?? []) {
+      for (const { cueId, rev, ...patch } of change.edits ?? []) {
+        if (rev !== undefined) await checkRev(tx, eventId, cueId, rev);
         if (patch.roomId !== undefined && !(await tx.room.findFirst({ where: { id: patch.roomId, eventId } }))) throw new Error(`No room ${patch.roomId} in event ${eventId}`);
         const { count } = await tx.cue.updateMany({ where: { id: cueId, eventId }, data: cueData(patch) });
         if (count !== 1) throw new Error(`No cue ${cueId} in event ${eventId}`);
