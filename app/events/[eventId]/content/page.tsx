@@ -7,6 +7,9 @@ import { prisma } from '@/src/db';
 import { DeliverableKind, RuleCheck } from '@/src/generated/prisma/enums';
 import { IssueLink, type Issued } from '../../../issue-link';
 import { Versions } from '../../../versions';
+import { buildFrame } from '@/src/live/frames';
+import { LiveChip, LiveProvider } from '../../../live-stream';
+import { ShowFileState } from '../../../show-files';
 import { refusable } from '../refusable';
 
 export const dynamic = 'force-dynamic';
@@ -92,9 +95,17 @@ export default async function Content({ params, searchParams }: { params: Promis
     }, ContentRefused);
   }
 
+  // The producer stream carries each deliverable's show-file pointer, read when the frame is built (D-042).
+  const frame = await buildFrame('runsheet', eventId, { clock: systemClock, since: null });
   return (
     <main>
       <h1>{event.name} — content turn-in</h1>
+      {frame && (
+        <LiveProvider url={`/api/live/${eventId}/runsheet`} initial={frame} timeZone={event.timezone}>
+          <LiveChip />
+          <ShowFileState />
+        </LiveProvider>
+      )}
       {error && <p role="alert">{error}</p>}
 
       {owners.filter((o) => o.deliverables.length > 0 || o.key.startsWith('sponsor:')).map((o) => (

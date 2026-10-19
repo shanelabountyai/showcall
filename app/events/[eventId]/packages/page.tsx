@@ -8,6 +8,9 @@ import { addRecording, issueMissingRecapLinks, issueRecapLink, recapFiles, revok
 import { prisma } from '@/src/db';
 import { hhmm, shortDay } from '@/src/time';
 import { IssueLink, type Issued } from '../../../issue-link';
+import { buildFrame } from '@/src/live/frames';
+import { LiveChip, LiveProvider } from '../../../live-stream';
+import { ShowFileState } from '../../../show-files';
 import { refusable } from '../refusable';
 
 export const dynamic = 'force-dynamic';
@@ -82,9 +85,17 @@ export default async function Packages({ params, searchParams }: { params: Promi
     published ? recapFiles(eventId) : [],
   ]);
 
+  // The producer stream carries each deliverable's show-file pointer, read when the frame is built (D-042).
+  const frame = await buildFrame('runsheet', eventId, { clock: systemClock, since: null });
   return (
     <main>
       <h1>{event.name} — distribution packages</h1>
+      {frame && (
+        <LiveProvider url={`/api/live/${eventId}/runsheet`} initial={frame} timeZone={event.timezone}>
+          <LiveChip />
+          <ShowFileState />
+        </LiveProvider>
+      )}
       {error && <p role="alert">{error}</p>}
       {!published && <p>Publish the agenda first — packages follow its running order.</p>}
       {statuses.map(({ key, title, status: s }) => (
