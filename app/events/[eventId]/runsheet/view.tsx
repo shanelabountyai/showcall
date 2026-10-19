@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { startTransition, useActionState, useEffect, useState, type FormEvent } from 'react';
 import type { ProducerData } from '@/src/live/frames';
 import type { Missed } from '@/src/live/stream';
 import type { CueRowState, RunSheetRow } from '@/src/runsheet/cascade';
@@ -73,8 +73,15 @@ function RowEditor({ cue, rows, action, as, labels }: { cue: CueRowState; rows: 
   }
   const anchors = rows.filter((r) => r.id !== cue.id);
   const preview = answer.kind === 'preview' ? answer : null;
+  // Submitted by hand, not through `<form action>`: React resets a form after an action, and a
+  // reset puts a controlled <select> back on its first option. What was typed must survive (D-039).
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+    startTransition(() => run(form));
+  };
   return (
-    <form action={run} aria-label={`Edit ${cue.label}`}>
+    <form onSubmit={submit} aria-label={`Edit ${cue.label}`}>
       <input type="hidden" name="cueId" value={cue.id} />
       <input type="hidden" name="rev" value={rev} />
       <input type="hidden" name="as" value={as} />
