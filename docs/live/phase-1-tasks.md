@@ -95,7 +95,7 @@ before L1.5. The spike branch is deleted, never merged.
 - [ ] **L1.5 `src/live/stream.ts`: the frame builder and the loop (D-038, D-043, D-046).**
   Pure core: `nextFrame(held: number, current: number, minuteRolled: boolean)` decides
   whether to send. `buildFrame(kind, key, tx)` reads `changeSeq` and the projection in one
-  `REPEATABLE READ` transaction. `loadRunSheet`, `callSheetStatus`, `liveShow` and
+  `REPEATABLE READ` transaction (`prisma.$transaction(fn, { isolationLevel: 'RepeatableRead' })`). `loadRunSheet`, `callSheetStatus`, `liveShow` and
   `resolveCrewPortal` take an optional `tx` to make that possible: a signature change
   only, with behaviour unchanged and existing tests green. `LiveSource.waitForChange` is
   the poll (`LIVE_POLL_MS`). `streamResponse(…)` returns a `ReadableStream` that:
@@ -114,6 +114,8 @@ before L1.5. The spike branch is deleted, never merged.
   - (iii) resuming at the current seq sends nothing until the next change;
   - (iv) a minute rollover on `live` sends a frame with an unchanged seq;
   - (v) the loop stops at `LIVE_MAX_MS`;
+  - no database connection is held between polls: 12 concurrent streams run against a
+    `connection_limit=10` pool while a page request still completes;
   - (vi) the frame and seq come from one snapshot. Commit a write between the seq read and
     the projection read in a test hook: the frame still shows the pre-write state.
 - [ ] **L1.6 Routes (D-040).** `app/api/live/[eventId]/runsheet/route.ts`,
@@ -122,18 +124,22 @@ before L1.5. The spike branch is deleted, never merged.
   `dynamic = 'force-dynamic'`, `maxDuration = 300`, and headers
   `Content-Type: text/event-stream`, `Cache-Control: no-store`, and for crew
   `Referrer-Policy: no-referrer`. The crew route re-resolves its token each poll and
-  closes on null. `proxy.ts` is unchanged: `/api/live/**` is behind the demo password
+  closes on null. It sends only when its projection's hash changed (D-040). The forced
+  drop (`?dropAfter=`) is honoured only under `LIVE_TEST_HOOKS=1`. `proxy.ts` is unchanged: `/api/live/**` is behind the demo password
   like every page. *Acceptance:*
   - a bad or expired token returns 404 before any byte;
   - a revoked token mid-stream closes within `LIVE_POLL_MS` + 100 ms (unit, with a fake
     source);
   - no route accepts a role, room or audience parameter from the client (test reads each
-    route's exports).
+    route's exports);
+  - with `LIVE_TEST_HOOKS` unset, `?dropAfter=` is ignored.
 - [ ] **L1.7 Client: `app/live-stream.tsx` (`useLiveStream`) and the status chip
   (PRD LV-4, LV-7).** Built on `EventSource`, or the fetch reader if L1.0 says so. It:
   - holds the seq and drops frames ≤ it;
   - replaces state on an equal-seq minute frame for `live`;
-  - shows `live`, `reconnecting…`, or `offline: refreshing every 5 s`. After 3 failed
+  - shows `live`, `reconnecting… (as of HH:MM)`, or `offline: refreshing every 5 s`. The
+    time is the venue-local minute of the last frame, so an SM can tell how old the
+    screen is. After 3 failed
     reconnects it mounts the existing `Poll`;
   - closes on `document.hidden` and reopens on show;
   - renders the `missed` list once per reconnect, dismissible.
@@ -162,13 +168,14 @@ fresh seed in either file order. Two browsers means two `browser.newContext()` i
   - A moves "Doors" 10 min and commits. Within 3 s, with no navigation, B shows Doors
     and its anchored dependants at the new times, and B's call-sheets tab shows only the
     affected roles NEEDS RE-ISSUE.
-  - A issues. If A1 Audio was affected, C shows the new issue number within 3 s. A role
-    that was not affected shows no change.
+  - A issues. C shows the new issue number within 3 s if A1 Audio was affected. If not, C
+    receives **no frame at all** (D-040), and its DOM and frame count are unchanged.
   - Assert no `page.goto` or `reload` between the action and the expectation, by
     checking `page.url()` and the navigation count.
 - [ ] **L1.9b Reconnect catch-up (LV-4).**
   - A opens `/runsheet`. A goes offline (`context.setOffline(true)`, or the test-only
-    `?dropAfter=` close if L1.0 found offline does not drop `EventSource`).
+    `?dropAfter=` close under `LIVE_TEST_HOOKS=1` if L1.0 found offline does not drop
+    `EventSource`).
   - B commits two edits to different rows. A comes back online.
   - Within 5 s, A's sheet shows both edits. Its "while you were away" list has exactly 2
     entries, naming B's actor.
@@ -183,16 +190,21 @@ fresh seed in either file order. Two browsers means two `browser.newContext()` i
   - The `ShowChange` count rose by exactly 2 across the whole test, read from a
     test-only count on the run-sheet page or from the DB in the spec through
     `execSync('psql …')`.
-- [ ] **L1.9d Role-filter leak (LV-5, hard rule 7).** Open the crew portal stream for every
-  seeded role (the seed's portal links, or reissue in a setup step), capturing raw frames
-  with `page.on('response')`, or by reading the SSE body with `request.get` and a 10 s
-  read. Run a script: move a cue tagged to Catering only, issue, then move a cue tagged to
-  A1 Audio only, and issue. For each role, assert that every captured frame contains only
-  cue ids from that role's own issued sheets. The foreign-label list is built from the
-  seed exactly as the unit sweep does in `callsheet.test.ts`. *Acceptance:* zero foreign
-  hits. The test fails red on purpose first: temporarily build the crew frame with
-  `loadRunSheet` in place of `resolveCrewPortal` on a scratch branch. Record the red run
-  in NEXT.md.
+- [ ] **L1.9d Role-filter leak (LV-5, hard rule 7).** Two layers, because Playwright
+  cannot read an open SSE body before the stream closes.
+  - (i) **The sweep, in vitest against the real route handler.** Call each crew route's
+    `GET` with a `Request` and an `AbortController`, and read frames from the returned
+    stream. Do this for every seeded role, while a script moves a cue tagged to Catering
+    only, issues, then moves a cue tagged to A1 Audio only, and issues. For each role,
+    every frame contains only cue ids, labels and rooms from that role's own issued
+    sheets, and a role whose sheet did not change got no frame. The foreign list is built
+    from the seed as `callsheet.test.ts` builds it.
+  - (ii) **e2e:** the A1 Audio portal's DOM, after both issues, contains none of
+    Catering's labels.
+
+  *Acceptance:* zero foreign hits. The sweep fails red on purpose first: on a scratch
+  branch, build the crew frame with `loadRunSheet` in place of `resolveCrewPortal`.
+  Record the red run in NEXT.md.
 - [ ] **L1.10 Latency number.** The two-browser test logs commit-to-visible ms for 20
   edits. Print p50 and max, and paste them into WRITEUP's entry. No adjective without the
   number.

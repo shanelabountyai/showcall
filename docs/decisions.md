@@ -975,8 +975,8 @@ drops any frame at or below it. That gives:
 - **No loss.** Every frame carries everything, so a skipped frame costs nothing. On
   reconnect the server compares `Last-Event-ID` with the current seq and sends the
   projection at once if it is behind.
-- **"While you were away" comes from the log, on producer views only.** It is the
-  `ShowChange` rows in `(Last-Event-ID, seq]`: actor, kinds, time. Crew views get none.
+- **"While you were away" comes from the log, on producer views only** (the `runsheet`
+  and `live` streams; producer call sheets ride on `runsheet`). It is the `ShowChange` rows in `(Last-Event-ID, seq]`: actor, kinds, time. Crew views get none.
   Their client diffs the sheet it held against the new one, and both are its own
   projection, so nothing foreign can appear.
 
@@ -1013,7 +1013,11 @@ and never by a client parameter:
 | `/api/live/call/:token` | portal token, re-checked every poll | `resolveCrewPortal(token, clock)` |
 
 No channel is shared between audiences, and the client never names the role it wants.
-A crew stream re-resolves its token on every poll. A reissued or expired link closes the
+**A crew stream sends a frame only when its own projection changed.** It compares a hash of
+the projection, not the seq, so another role's edit, issue or receipt sends it nothing.
+That hides the content and also the timing of other roles' activity. Its `id:` is still the
+seq, and on reconnect it always gets the current projection, which is cheap. A crew stream
+re-resolves its token on every poll. A reissued or expired link closes the
 stream within one poll, and a reconnect is a 404 like the page (D-026). Hard rule 7's
 sweep is extended to frames: every role, every frame, no foreign cue id, label or room.
 Producer streams are protected only by the demo password. That is SEC-01, stated
@@ -1057,6 +1061,12 @@ the 300 s default that works on every plan. The browser's `EventSource` reconnec
   reopens it when shown. An open stream holds a function instance (about $0.0106 per
   GB-hour) and keeps Neon above zero. A tab forgotten overnight would undo D-034.
 - **Not LISTEN/NOTIFY.** On Neon it needs a direct connection and dies at scale-to-zero.
+- **A poll holds no connection.** Each poll is a short query that returns its pooled
+  connection. Only `buildFrame` opens a brief `RepeatableRead` transaction. Ten open
+  streams must not exhaust `connection_limit=10`.
+- **Test hooks are off in production.** A forced drop for the reconnect e2e is honoured only
+  when `LIVE_TEST_HOOKS=1`. That is set in `.env.test` and never in Vercel, and a unit
+  test asserts the hook is inert when the variable is unset.
 - **Seam:** the stream reads through one `LiveSource` (`waitForChange(eventId, afterSeq,
   signal)`), so O-1 → C replaces only that function.
 

@@ -125,11 +125,13 @@ in any frame.
 - [ ] `/api/live/call/:token` sends only `resolveCrewPortal(token)` output: the role's latest
   issued sheet and its changes since the previous issue (D-041).
 - [ ] An issue that changes Catering and not A1 Audio produces a frame for Catering's
-  portal and **no content change** for A1 Audio's. A1 Audio's stream may advance its seq,
-  but its sheet is byte-identical.
+  portal and **no frame at all** for A1 Audio's. A crew stream sends only when its own
+  projection changed (D-040), so it reveals neither the content nor the timing of
+  another role's activity.
 - [ ] Leak sweep: for every role, over a scripted sequence of edits and issues, no frame on
   that role's stream contains a cue id, label or room that is not on that role's own
-  projection (L1.9d). This is the existing hard-rule-7 sweep, extended to stream frames.
+  projection (L1.9d, run in vitest against the real route handler). This is the existing hard-rule-7
+  sweep, extended to stream frames.
 - [ ] A reissued (revoked) or expired link closes its open stream within one poll, and a
   reconnect gets 404.
 
@@ -147,10 +149,11 @@ page open, I see an approve or override land live. A speaker's post-lock upload 
 
 **LV-7 Degraded, never wrong.** As anyone, when the live channel cannot connect, I can
 see that, and the page still works.
-- [ ] A status chip shows `live`, `reconnecting…` or `offline: refreshing every 5 s`.
+- [ ] A status chip shows `live`, `reconnecting… (as of HH:MM)` or `offline: refreshing
+  every 5 s`. HH:MM is the venue time of the last frame received.
   After 3 failed reconnects the page falls back to the existing `Poll`.
 - [ ] A hidden tab closes its stream (`visibilitychange`) and reopens on show, catching up
-  as in LV-4. A tab left open overnight therefore does not hold a function instance or
+  as in LV-4. An SM's phone waking from screen lock is the same path. A tab left open overnight therefore does not hold a function instance or
   keep Neon awake (D-043).
 
 **LV-8 The transport is decided before code.** As Shane, I see the options, the

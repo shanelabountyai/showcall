@@ -172,3 +172,30 @@ Recorded as **O-1, default A in force** (D-043).
    only if O-1 moves to B.
 5. Ably free-tier feature gating (history, ordering). This matters only if O-1 moves to C,
    and C does not rely on either.
+
+## 9. Review log (2026-10-19)
+
+A fresh-eyes pass through two lenses: a production stage manager and a platform engineer.
+**No subagent tool was available in the kickoff session**, so the author ran this pass
+and it is not independent. Re-run it with a separate reviewer at the plan gate if that
+matters. Findings and what changed:
+
+| # | Lens | Finding | Fix |
+|---|---|---|---|
+| R1 | Platform | A crew stream that advanced on every show seq would reveal *when* other roles were edited, issued or confirmed. That is a timing side channel even with no content. | D-040: a crew stream sends only when its own projection's hash changed. PRD LV-5 and L1.9a now say "no frame at all". |
+| R2 | Platform | Playwright cannot read an open SSE body until the stream ends (280 s), so the leak sweep as written could not run. | L1.9d: the sweep runs in vitest against the real route handler, reading frames from the returned stream. e2e checks the portal DOM. |
+| R3 | Platform | The test-only `?dropAfter=` would ship in the production build that e2e uses, as a client-controlled parameter. | D-043 and L1.6: it is honoured only under `LIVE_TEST_HOOKS=1` (`.env.test`, never Vercel), with a test that it is inert when unset. |
+| R4 | Platform | Ten open streams each polling through Prisma could starve the `connection_limit=10` pool and block page requests. | D-043: a poll holds no connection between ticks. L1.5 acceptance: 12 streams on a 10-connection pool while a page still loads. |
+| R5 | Platform | "One snapshot" needed a concrete mechanism under Prisma 7. | L1.5 names `isolationLevel: 'RepeatableRead'` on the interactive transaction. |
+| R6 | Stage manager | "Reconnecting…" alone does not tell an SM how old the screen is, and on show day that is the question. | L1.7 and LV-7: the chip shows the venue time of the last frame. |
+| R7 | Stage manager | A phone that sleeps between cues is the normal case, not an edge. | LV-7: the screen-lock wake is named as the hidden-tab path, so it catches up the same way. |
+| R8 | Stage manager | Which views get "while you were away" was ambiguous. Live mode is producer-side, and the SM needs it most. | D-038: the `runsheet` and `live` streams get the missed list. Crew do not. |
+
+Considered and left as they are:
+- **Issued-only for crew (D-041).** An SM can still put a show-day change in front of crew
+  in one action with the O-3 tick.
+- **Reject-and-refresh friction mid-show (D-039).** It is the calling-desk rule ("one voice
+  on the cue"). The loser's typed values are kept.
+- **A long portal upload holding the event row lock through its trigger.** The lock is
+  taken at the trigger, after the insert, and held only to commit, so cascades wait for
+  milliseconds. Recorded in case uploads ever stream to object storage instead.
