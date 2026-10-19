@@ -92,7 +92,7 @@ export async function buildFrame(kind: FrameKind, key: string, opts: { clock: Cl
     if (kind === 'runsheet') data = await producerProjection(eventId, tx);
     else if (kind === 'live') data = await liveShow(eventId, opts.clock, tx);
     else {
-      const portal = await resolveCrewPortal(key, opts.clock, tx);
+      const portal = (await resolveCrewPortal(key, opts.clock, tx)) && await loadRunSheet(eventId, tx); // RED ON PURPOSE (L1.9d): the producer sheet in place of the issued sheet
       if (!portal) return null;
       data = portal;
     }
