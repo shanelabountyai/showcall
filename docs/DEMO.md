@@ -61,6 +61,18 @@ Start from a fresh seed. Portal links are the seed's printed ones, or reissued i
 | 6. Recap | Summit → **Packages** → **Attendees** | "Lucia Varga's recording is withheld, and it says why: she did not consent to recording. Owen Castellano's is released." |
 | 7. Attendee link | **Attendee recap links** → Avery Chen → **Reissue**, open it | "Avery's page lists session decks, plus Owen's recording. Lucia's deck is there, her recording isn't. Consent is checked again on every download, so a withdrawal takes effect before any rebuild." |
 
+## Showcall Live — "two windows" (~3 min)
+
+Start from a fresh seed. Two browser windows side by side (a second profile or a private window, so each has its own stream).
+
+| Stop | Click | Say |
+|---|---|---|
+| 1. Two views, one show | Window A: Summit → **Run sheet** → Editing as **Morgan Ellis**. Window B: Summit → **Call sheets** | "Both are live. The chip says so. Nothing on either page polls; each holds one stream that sends the whole projection at a change sequence." |
+| 2. A row edit | A: **Edit Doors open** → Offset −20 → **Preview** → **Commit** | "The preview named every cue the move carries. B flips *Doors & Registration* to NEEDS RE-ISSUE within a poll, and only that role. Nobody reloaded." |
+| 3. Two editors, one row | Open the run sheet in B too, as **Priya Natarajan**. Both open **Closing reception**, type different starts, preview. A commits, then B commits | "B is refused and told who changed it and when. What B typed is still in the form, beside the row as it is now. **Re-preview against current**, commit, and it lands. The change log has two entries, not three." |
+| 4. Catch-up | B: turn the network off (DevTools → Offline), make two edits in A, turn it back on | "B comes back with both edits on the sheet and a *while you were away* list naming them, once each. Drop it again with nothing new: the list does not grow." |
+| 5. The crew side | Issue an A1 Audio link (Call sheets → **Issue portal link**), open it in B. In A, edit **Lunch service** and **Issue changed sheets**, then edit **Walk-in music** and issue | "Catering's re-issue sends A1 Audio's portal nothing at all, not even a heartbeat it could time. Its own re-issue appears in a few seconds. Crew see issued sheets, never drafts." |
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -72,10 +84,12 @@ Start from a fresh seed. Portal links are the seed's printed ones, or reissued i
 | Portal link 404s | Links are shown once and a reseed invalidates them: reissue from the app (see Setup) |
 | Rain-call work-rule warning is missing | The rain call was already executed: re-seed |
 | Live site returns 401 | Basic auth: any username, the password from `.env.deploy.local` |
+| Live chip says *reconnecting* or *offline* | The page falls back to a 5 s refresh and keeps retrying; check the server is up. A hidden tab closes its stream on purpose and reopens on show |
 | Port 4000 busy | `lsof -ti :4000 \| xargs kill` |
 
 ## Concede before you're asked
 
+- Live latency is a poll (about a second) plus a build, measured at demo scale only. "Editing as" is a name picked from the staff list, not a login (D-044).
 - Synthetic data; no user accounts (per-link roles, one shared password on the live site); the live copy holds the demo on purpose.
 - The rain call is executed before its decide-by, not watched ticking over: the app reads the real clock, and the cue is tomorrow at 10:00. Unit tests cover the deadline escalation on an injected clock.
 - Releasing rooms posts nothing to the budget by design (D-018): only accepted exposure and awards do.

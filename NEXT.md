@@ -1,7 +1,7 @@
 # Next
 
-**Showcall Live phase 1 (S-27 to S-30) is being built on branch `live-phase-1`, PR into
-`live-kickoff`.** Shane approved building it unattended on a branch (2026-10-19), skipping
+**Showcall Live phase 1 (S-27 to S-30) is built on branch `live-phase-1`, PR #2 into
+`live-kickoff` (not merged).** Shane approved building it unattended on a branch (2026-10-19), skipping
 the plan gate's wait but not its plan: the plan is below, written before any code.
 O-1 to O-7 are built on their defaults (A: SSE + seq poll; reject-and-refresh per row;
 issued sheets only for crew, tick off; 1000 ms / 280 000 ms / 300 s; Neon awake while
@@ -80,12 +80,47 @@ So the graph is `Deliverable → Event`, acyclic.
 - `20261019130000_cue_rev/migration.sql`: `Cue.rev` and a BEFORE UPDATE trigger
   `NEW.rev := OLD.rev + 1`.
 
+## Result (2026-10-19)
+
+Built: L1.1–L1.8, L1.9a–d, L1.10, L1.11 (WRITEUP entry, DEMO "two windows" stop,
+backlog rows). Skipped: **L1.0** (needs Shane). Not written: `docs/live/phase-2-tasks.md`
+(the kit writes it after review).
+
+CI on PR #2 (`live-phase-1` → `live-kickoff`), last green-for-live run **39320395646**
+(51defba):
+- `ci` job (migrate, typecheck, all vitest incl. Postgres suites): **success**.
+- `e2e` job: all 4 `e2e/live.spec.ts` tests **passed**; `e2e/showcall.spec.ts` fails at
+  "content turn-in … issues a link" (line 146) and the 24 serial tests after it do not run.
+  **This failure predates the branch:** re-running the baseline commit 4f69f23 (plan +
+  CI job only, no product code) failed e2e too (run 39315104250, attempt 2), while its
+  first attempt an hour earlier passed. It looks time-of-day dependent; not touched here
+  ("fix only what your change broke"). Needs a look before S-30 can be ✅.
+- Latency (L1.10, CI runner, production build): **p50 917 ms, max 941 ms** over 20 edits.
+- **L1.9d red run:** commit 828f4e0 built crew frames from `loadRunSheet`; CI run
+  **39320828222** `ci` job failed in vitest at `src/live/sweep.test.ts` (the role's
+  stream never carried its issued sheet). Reverted in 4efdde4. The in-test negative
+  control also shows the string check catching a leaky frame on every run.
+
+Locally verified without a database: pure units (`stream`, `client-state`), and the
+client against a production Next build with a fake stream in a local Chromium:
+EventSource catch-up after an offline drop (2 missed, none duplicated), and the row
+editor's conflict / re-preview flow. That probe found the controlled-select reset bug.
+
 ## Needs Shane
 
-- L1.0 spike (Vercel CLI, Preview env password, fluid compute): (a)–(e) unrecorded.
-- O-1 to O-7: confirm or change, with a dated line (exit criterion).
-- The red run of the leak sweep on a scratch branch (L1.9d): see the result section below
-  once CI has run it.
+- L1.0 spike (Vercel CLI, Preview env password, fluid compute): (a)–(e) unrecorded,
+  including whether `EventSource` re-prompts behind HTTP Basic (D-048 names the fallback).
+- O-1 to O-7: confirm or change, with a dated line (exit criterion). All defaults built.
+- Latency on the deployed site, and cost against D-034 (S-31).
+- The pre-existing `showcall.spec.ts` content turn-in failure in CI.
+- Local runs: add `LIVE_TEST_HOOKS=1` to `.env.test` (the reconnect e2e needs `?dropAfter=`).
+
+## Next item
+
+**S-31** (live phase 2): write `docs/live/phase-2-tasks.md` first (deploy via the
+`main-manual` hook, deployed latency, GB-hours and Neon hours for a one-hour demo with
+three views, the 280 s reconnect in the wild, O-4/O-5 from those numbers), then stop for
+review.
 
 ## Shipped project (closure 2026-09-25)
 
