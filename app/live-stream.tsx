@@ -16,8 +16,9 @@ import { Poll } from './events/[eventId]/live/poll';
  * - A hidden tab closes its stream and reopens it on show, catching up like
  *   any reconnect: a tab left open overnight holds no function instance.
  * - After three failed reconnects in a row the page falls back to the old
- *   5 s refresh (`Poll`) while the browser keeps retrying; the first frame
- *   back unmounts it.
+ *   5 s refresh (`Poll`) while the stream keeps retrying (the browser's own
+ *   retry, or ours when it gives up, and at once when the network returns);
+ *   the first frame back unmounts it.
  */
 export function useLiveStream<T>(url: string, initial: Frame<T>, opts: { replaceOnEqual?: boolean } = {}) {
   const [state, setState] = useState<HeldState<T>>(() => hold(initial, systemClock.now().getTime()));
@@ -35,36 +36,47 @@ export function useLiveStream<T>(url: string, initial: Frame<T>, opts: { replace
     let es: EventSource | null = null;
     let failures = 0;
     let slow: ReturnType<typeof setTimeout> | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // The last seq this view heard on the channel. A reopen resumes from it, not from a
+    // page re-render's seq, so "while you were away" lists what the channel missed.
+    let heard = held.current;
     const open = () => {
+      clearTimeout(retry);
+      es?.close();
       const u = new URL(url, window.location.href);
-      u.searchParams.set('since', String(held.current));
+      u.searchParams.set('since', String(heard));
       const source = new EventSource(u);
       es = source;
       source.onopen = () => { failures = 0; clearTimeout(slow); setStatus('live'); };
       source.onmessage = (e: MessageEvent<string>) => {
         const frame = JSON.parse(e.data) as Frame<T>;
+        heard = Math.max(heard, frame.seq);
         setState((s) => applyFrame(s, frame, { at: systemClock.now().getTime(), replaceOnEqual: replace }));
         failures = 0;
         setStatus('live');
       };
       source.onerror = () => {
-        if (source.readyState === EventSource.CLOSED) { setStatus('offline'); return; }
         failures += 1;
-        if (failures >= 3) { clearTimeout(slow); setStatus('offline'); return; }
-        // A planned close at the end of a stream's life reconnects within the 2 s retry: no flash.
         clearTimeout(slow);
-        slow = setTimeout(() => setStatus((st) => (st === 'live' ? 'reconnecting' : st)), 3000);
+        if (failures >= 3) setStatus('offline');
+        // A planned close at the end of a stream's life reconnects within the 2 s retry: no flash.
+        else slow = setTimeout(() => setStatus((st) => (st === 'live' ? 'reconnecting' : st)), 3000);
+        // The browser retries by itself unless it gave up (a 404, or a network it calls futile); then we do.
+        if (source.readyState === EventSource.CLOSED) retry = setTimeout(() => { if (!document.hidden) open(); }, failures >= 3 ? 5000 : 2000);
       };
     };
-    const close = () => { es?.close(); es = null; };
+    const close = () => { clearTimeout(retry); es?.close(); es = null; };
     const onVisibility = () => {
       if (document.hidden) close();
       else if (!es) open();
     };
+    const onOnline = () => { if (!document.hidden && (!es || es.readyState !== EventSource.OPEN)) open(); };
     if (!document.hidden) open();
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
       clearTimeout(slow);
       close();
     };
