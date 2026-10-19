@@ -918,3 +918,192 @@ about 2.1 compute hours a day before the change.
   minimum 1, if cold queries are too slow in a demo.
 
 Takes effect on the next production deployment (D-033: the `main-manual` hook).
+
+## D-035 · 2026-10-19 · Showcall Live is a follow-on in this repo, under the same hard rules
+
+Build log 11c ("Showcall Live — Real-Time Run Sheet") was split out when Showcall shipped.
+It lives in this repo, on the event that already exists, and does not start a new project.
+The PRD is `docs/live/prd-showcall-live.md`. The research and the options table are in
+`docs/live/brief.md`. The tasks are in `docs/live/phase-1-tasks.md`, and the backlog
+items are S-27 to S-31. All seven hard rules apply unchanged. Live adds no new rule, only
+new places where the old ones must hold: rule 7's sweep now covers stream frames, and
+rule 5's lock now covers the push path. D-036 to D-047 are kickoff defaults. Shane can
+overturn any of them at the plan gate. After that they are settled like any other
+decision.
+
+## D-036 · 2026-10-19 · Postgres is the only truth; the channel carries what the server read from it
+
+Nothing on the live channel is authoritative. A frame is the server's projection of
+Postgres at a change sequence (D-037). A client never writes state back over the
+channel. Writes stay server actions: the row editor, GO, issue, approve and override.
+Each runs its existing checks and transaction. So the transport (O-1) can change without
+moving a rule, and a lost or forged frame can at worst show something stale, never change
+anything.
+
+## D-037 · 2026-10-19 · One change sequence per show, bumped by trigger in commit order
+
+`Event.changeSeq` (Int, default 0) and `ShowChange` (eventId, seq, txid, kinds[], actor,
+at), the latter append-only by trigger and unique on `(eventId, seq)` and
+`(eventId, txid)`. AFTER triggers on every table a live view reads call one function,
+`bump_show_change(eventId, kind)`. The tables are `Cue`, `CueRole`, `LiveMark`,
+`CallSheetIssue`, `CallSheetReceipt`, `AgendaVersion`, `ShowFileLock`, `ContentVersion`,
+and `Event.runSheetVersion` on change. The first call in a transaction bumps
+`changeSeq` with `UPDATE … RETURNING`, which takes the event row lock, and inserts the
+`ShowChange` row. Later calls in the same transaction only append their kind. So:
+
+- **Seq order is commit order, with no gaps.** The row lock is held to commit, so seq
+  N+1 cannot commit before N. A Postgres `SEQUENCE` or a timestamp was the tempting
+  alternative. Both hand out numbers before commit, and a reader that sees 12 committed
+  while 11 is still in flight skips 11 for good.
+- **Nothing can forget to bump.** This is the D-003 move again: a trigger, not a call each
+  writer must remember. A cascade, a contingency branch, a venue edit's re-check, a GO
+  and a portal upload all bump without code changes.
+- **One seq per transaction, not per row.** A cascade that moves 14 cues is one change.
+
+Lock order stays acyclic. The cascade takes only the event row. Lock writes take the
+deliverable row and then, through the trigger, the event row. Nothing takes them the other
+way round. `issueCallSheets` and `markGo` gain a transaction so their trigger runs inside
+it (this closes `callsheet.ts`'s `ponytail:` comment).
+
+## D-038 · 2026-10-19 · A frame is a whole projection at a seq, never a delta
+
+Each frame is `id: <seq>` plus the subscriber's whole projection, read together with the
+seq in one `REPEATABLE READ` transaction. The client keeps the highest seq it holds and
+drops any frame at or below it. That gives:
+
+- **No duplication.** Applying the same state twice is a no-op, and a stale frame is ignored.
+- **No loss.** Every frame carries everything, so a skipped frame costs nothing. On
+  reconnect the server compares `Last-Event-ID` with the current seq and sends the
+  projection at once if it is behind.
+- **"While you were away" comes from the log, on producer views only.** It is the
+  `ShowChange` rows in `(Last-Event-ID, seq]`: actor, kinds, time. Crew views get none.
+  Their client diffs the sheet it held against the new one, and both are its own
+  projection, so nothing foreign can appear.
+
+Deltas were the alternative. They are smaller on the wire but need gap detection, replay
+and ordered apply, which is a second state machine to get right. At demo scale a run sheet
+is a few dozen rows.
+
+## D-039 · 2026-10-19 · Two edits to one row: reject and refresh on a row revision
+
+Shane's call at the plan gate (O-2); this is the default. `Cue.rev` (Int, default 0) is
+bumped by every write to the row. The row editor posts the `rev` it loaded. The commit
+runs inside `commitCascade`'s transaction, under the event lock. It is refused with
+`RowChanged(current, by, at)` when the row's `rev` has moved. The form keeps the refused
+values next to the current ones, and re-preview is one click. The existing
+preview-equals-commit check (`CascadeChanged`, D-023) still applies on top. An edit to
+another row that moves what you previewed is refused the same way, so what lands is
+always what someone saw.
+
+**Not last-writer-wins per field.** LWW on `offsetMin` would land a cascade nobody
+previewed, and on a show a second person moving the same cue is a communication failure
+worth surfacing ("standing by, it moved"). LWW is reconsidered only for label-only edits,
+which cascade nothing (O-2). A rebase moves derived times without writing a cue row. It is
+not a row conflict. The cascade check catches it.
+
+## D-040 · 2026-10-19 · Filtering and locks are enforced per subscriber, at send time, by the existing projections
+
+Each open stream is one subscriber with one projection function, chosen by the endpoint
+and never by a client parameter:
+
+| Endpoint | Credential | Projection |
+|---|---|---|
+| `/api/live/:eventId/runsheet` | demo password (D-032) | `loadRunSheet` + `callSheetStatus` |
+| `/api/live/:eventId/live` | demo password | `liveShow(eventId, clock)` |
+| `/api/live/call/:token` | portal token, re-checked every poll | `resolveCrewPortal(token, clock)` |
+
+No channel is shared between audiences, and the client never names the role it wants.
+A crew stream re-resolves its token on every poll. A reissued or expired link closes the
+stream within one poll, and a reconnect is a 404 like the page (D-026). Hard rule 7's
+sweep is extended to frames: every role, every frame, no foreign cue id, label or room.
+Producer streams are protected only by the demo password. That is SEC-01, stated
+rather than solved.
+
+## D-041 · 2026-10-19 · Crew see issued sheets live, never drafts
+
+Shane's call (O-3); this is the default. The crew portal stays "exactly what was sent"
+(D-026): its stream sends the latest issue, so a re-issue appears without reload. A cue
+edit that has not been issued does not reach crew. It reaches producers, who see NEEDS
+RE-ISSUE flip live on the call-sheets page. This keeps D-009 intact ("re-issue exactly
+the affected sheets"), and receipts keep meaning "I have this issue". The option for show
+day, kept open in O-3: a "commit and issue changed sheets" tick on the row editor, off by
+default. It puts both in one action, and the issue is still its own transaction after the
+cascade commits (as D-023 does).
+
+## D-042 · 2026-10-19 · Show-file locks on the channel: read the pointer at send, never write it
+
+Frames that show content state (producer content and packages views) read the latest
+`ShowFileLock` when they are built. A speaker's post-lock upload bumps the seq (D-037).
+Producers then see "v8 uploaded, show file still v7" live. No view shows v8 as the show
+file until a producer's override lands. No live endpoint writes `ShowFileLock`, and a test
+greps `src/live/**` and `app/api/live/**` for it. The speaker content portal gets no
+stream in phase 1. A speaker learning live that their deck was approved is not on the card.
+
+## D-043 · 2026-10-19 · Transport default: SSE from a route handler, polling the change seq
+
+Shane's call (O-1); this is the default, chosen against the Vercel limits read on
+2026-10-19 (`docs/live/brief.md` §3–5). Each stream is a Node route handler returning a
+`ReadableStream`. It reads `changeSeq` every `LIVE_POLL_MS` (1000) and sends a frame when
+the seq moves (or on the minute, D-046). It closes itself at `LIVE_MAX_MS` (280 s), under
+the 300 s default that works on every plan. The browser's `EventSource` reconnects with
+`Last-Event-ID`.
+
+- **Why:** no new dependency or vendor. It runs the same under `next start`, so the e2e
+  gate covers it. Filtering stays in the projections hard rule 7 already tests.
+  `Last-Event-ID` is catch-up for free.
+- **Trade-off accepted:** latency is about one poll (1–2 s), and the database takes one
+  cheap query per second per open stream.
+- **Hidden tabs disconnect.** On `visibilitychange` the client closes the stream and
+  reopens it when shown. An open stream holds a function instance (about $0.0106 per
+  GB-hour) and keeps Neon above zero. A tab forgotten overnight would undo D-034.
+- **Not LISTEN/NOTIFY.** On Neon it needs a direct connection and dies at scale-to-zero.
+- **Seam:** the stream reads through one `LiveSource` (`waitForChange(eventId, afterSeq,
+  signal)`), so O-1 → C replaces only that function.
+
+## D-044 · 2026-10-19 · "Editing as" names the actor; it is not authentication
+
+The change log records an actor. The row editor and the call-sheets page carry an
+"Editing as" picker: staff with a `producer` or `stage_manager` assignment on this event
+(today, or any day before the show). The server action re-checks the assignment, as
+`markGo` does (D-011), and passes the name to the trigger with
+`set_config('showcall.actor', …, true)`. An edit with no valid actor is refused. Anyone
+with the demo password can pick any name, so this is attribution, not identity. SEC-01
+stays open, and nothing in live claims otherwise.
+
+## D-045 · 2026-10-19 · A run-sheet row editor is in scope
+
+Today no producer path edits a single cue (cues change only by rebase, contingency branch
+or seed), so the card's "two people editing the same row" has nothing to edit. The new
+`/events/:id/runsheet` lists rows. Each cue row has a form for label, duration, offset,
+and fixed day and start, or anchor and edge. It previews through `previewCascade` and
+commits through `commitCascade` with `expected` and the row's `rev`. Session rows are
+read-only there: they move by agenda publish and rebase. Adding, deleting and re-tagging
+cues stay out of phase 1.
+
+## D-046 · 2026-10-19 · The live-mode stream also sends on the minute
+
+Projected times in live mode move with the clock once a row is overdue, with nothing
+written (D-010). The `/live` stream therefore also sends a frame when
+`localNow(clock.now()).min` rolls over, stamped with the current seq. Clients treat an
+equal seq from a minute frame as a replace, not a drop. The clock is the injected one, so
+tests drive the rollover with `fixedClock`.
+
+## D-047 · 2026-10-19 · No template change; the stream is a foundation candidate after it is measured
+
+Showcall is not a saas-foundation clone (D-001), so nothing template-owned exists here and
+nothing in saas-foundation changes for live. If S-31 measures the stream as sound,
+propose `src/live/stream.ts` (poll loop, `Last-Event-ID` resume, hidden-tab and max-life
+close) to saas-foundation's backlog as a `realtime` module. That proposal is made there,
+not in this repo.
+
+## Open — Showcall Live, need Shane's call (defaults are in force until changed)
+
+| # | Question | Default in force | Why it is open |
+|---|---|---|---|
+| O-1 | Transport | **A: SSE + Postgres seq poll** (D-043). Alternatives: B Vercel WebSockets (beta) + Redis; C Ably poke-only (`{seq}` only, clients pull); D Cloudflare Durable Object per show. | A trades 1–2 s latency and one query per second per view for no new vendor and full local test parity. C is the upgrade if latency or view count ever matters. B waits on the beta and local parity. D fits server-side filtering badly. Options table: brief §5. |
+| O-2 | Conflict granularity | **Reject-and-refresh per row** on `Cue.rev` (D-039) | LWW per field could be allowed for label-only edits, since they cascade nothing |
+| O-3 | Crew on a show-day change | **Issued sheets only**; the "commit and issue" tick on the editor is **off by default** (D-041) | A stage manager may want the tick on by default on show days |
+| O-4 | Poll interval and stream life | `LIVE_POLL_MS` 1000, `LIVE_MAX_MS` 280 000, `maxDuration` 300 | 800 s on Pro means fewer reconnects but holds instances longer. 500 ms halves latency and doubles queries. |
+| O-5 | Neon while a view is open | **Accept** compute awake while any stream is open. Hidden tabs disconnect. | Measured in S-31 against D-034's baseline. If over, raise the poll to 2 s or move to C. |
+| O-6 | Who may edit a row | **Producer or stage manager assigned to the event**, by "Editing as" (D-044) | Could be producers only, or anyone with the password |
+| O-7 | Model per item | **Opus** for S-27 (triggers, seq) and S-29 (stream, catch-up); Sonnet for S-28's UI and S-30's tests, per D-005's split | Shane's pick, as D-005 was |
