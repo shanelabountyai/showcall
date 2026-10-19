@@ -41,3 +41,38 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run typecheck
       - run: npx vitest run
+
+  # The phase gate's e2e sweep on the production build (D-024), with the live
+  # test hooks on (D-043). Its own job, so a unit failure and an e2e failure
+  # read as different conclusions.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/showcall_test?connection_limit=10&pool_timeout=20
+      LIVE_TEST_HOOKS: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: psql -c "create database showcall_test"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
