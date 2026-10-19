@@ -10,7 +10,8 @@ export default defineConfig({
   fullyParallel: false, // one seeded event shared by every spec, edited in place
   workers: 1,
   timeout: 30_000,
-  reporter: 'list',
+  // In CI, failures also land as check annotations: they can be read where job logs cannot.
+  reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: { baseURL: 'http://localhost:4000' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
