@@ -1,27 +1,31 @@
 import { notFound, redirect } from 'next/navigation';
-import { confirmReceipt, PortalRefused, resolveCrewPortal, submitCoi } from '@/src/callsheet/portal';
-import type { CallSheetRow } from '@/src/callsheet/callsheet';
+import { confirmReceipt, PortalRefused, submitCoi } from '@/src/callsheet/portal';
 import { systemClock } from '@/src/clock';
 import { MAX_UPLOAD_BYTES } from '@/src/content/pipeline';
-import { fromDbDate, hhmm, shortDay } from '@/src/time';
+import { buildFrame, type CrewData } from '@/src/live/frames';
+import { fromDbDate, shortDay } from '@/src/time';
 import { refusable } from '../../../events/[eventId]/refusable';
+import { LiveChip, LiveProvider } from '../../../live-stream';
+import { CrewIssue } from './issue';
 
 export const dynamic = 'force-dynamic';
 
-const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
-const when = (r: CallSheetRow) => `${hhmm(r.startMin)}–${hhmm(r.endMin)} ${shortDay(r.day)}, ${r.room}`;
+/** Frames carry dates as ISO strings (they went through JSON); the first frame is built the same way. */
+const stamp = (d: Date | string) => `${new Date(d).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 
 /**
  * The crew/vendor portal (P1-3, D-026). Public: the token in the path is the
  * only credential, and every write re-checks it in src/callsheet/portal.ts.
- * Shows the latest issued sheet exactly as sent. A bad or expired link is a
- * plain 404.
+ * Shows the latest issued sheet exactly as sent, and a re-issue live through
+ * the role's own stream (D-040, D-041). A bad or expired link is a plain 404.
  */
 export default async function CrewPortal({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await params;
   const { error } = await searchParams;
-  const p = await resolveCrewPortal(token, systemClock);
-  if (!p) notFound();
+  const frame = await buildFrame('crew', token, { clock: systemClock, since: null });
+  if (!frame) notFound();
+  const p = frame.data as CrewData;
+  const timeZone = p.timezone;
   const here = `/portal/call/${token}`;
 
   async function doConfirm(form: FormData) {
@@ -37,51 +41,14 @@ export default async function CrewPortal({ params, searchParams }: { params: Pro
     await refusable(here, () => submitCoi(token, { filename: file.name, mimeType: file.type, bytes }, String(form.get('expiresOn')), systemClock), PortalRefused);
   }
 
-  const issue = p.issue;
-  const days = issue ? Map.groupBy(issue.sheet.rows, (r) => r.day) : new Map();
-  const c = issue?.changes;
-  const changes = c ? [
-    ...c.added.map((r) => `Added: ${r.label}, ${when(r)}`),
-    ...c.removed.map((r) => `Removed: ${r.label}, was ${when(r)}`),
-    ...c.changed.map(({ from, to }) => `Changed: ${to.label}, now ${when(to)} (was ${when(from)})`),
-    ...(c.reportTo ? [`Report to changed (was: ${c.reportTo.from || 'not set'})`] : []),
-  ] : [];
-
   return (
     <main>
+      <LiveProvider url={`/api/live/call/${token}`} initial={frame} timeZone={timeZone}>
       <h1>{p.event} — {p.role} call sheet</h1>
+      <LiveChip />
       {error && <p role="alert">{error}</p>}
-      {!issue ? <p>No call sheet has been issued to you yet.</p> : (
-        <>
-          <p>Issue {issue.number} · issued {stamp(issue.issuedAt)}</p>
-          {issue.confirmedAt
-            ? <p role="status">You confirmed receipt of issue {issue.number} at {stamp(issue.confirmedAt)}.</p>
-            : (
-              <form action={doConfirm}>
-                <input type="hidden" name="issueId" value={issue.id} />
-                <button type="submit">Confirm I have issue {issue.number}</button>
-              </form>
-            )}
-          {issue.sheet.reportTo && <p><strong>Report to:</strong> {issue.sheet.reportTo}</p>}
-          {changes.length > 0 && (
-            <section aria-label="Changes">
-              <h2>Changed since issue {issue.number - 1}</h2>
-              <ul>{changes.map((t) => <li key={t}>{t}</li>)}</ul>
-            </section>
-          )}
-          {days.size === 0 && <p>No cues on this sheet.</p>}
-          {[...days].map(([day, rows]: [string, CallSheetRow[]]) => (
-            <section key={day}>
-              {/* Rows are in run-sheet order, so a day's first row is its call. */}
-              <h2>{shortDay(day)} — call {hhmm(rows[0]!.startMin)}</h2>
-              <table>
-                <thead><tr><th>Time</th><th>Room</th><th>Cue</th></tr></thead>
-                <tbody>{rows.map((r) => <tr key={r.cueId}><td>{hhmm(r.startMin)}–{hhmm(r.endMin)}</td><td>{r.room}</td><td>{r.label}</td></tr>)}</tbody>
-              </table>
-            </section>
-          ))}
-        </>
-      )}
+      <CrewIssue confirm={doConfirm} />
+      </LiveProvider>
 
       {p.catering && (
         <section aria-label="Dietary and accessibility">
@@ -104,7 +71,7 @@ export default async function CrewPortal({ params, searchParams }: { params: Pro
           </form>
           <ul>
             {p.coi.map((s) => (
-              <li key={s.id}>{s.filename} · expires {shortDay(fromDbDate(s.statedExpiresOn))} · uploaded {stamp(s.submittedAt)} · {s.docId ? 'accepted' : 'waiting for review'}</li>
+              <li key={s.id}>{s.filename} · expires {shortDay(fromDbDate(new Date(s.statedExpiresOn)))} · uploaded {stamp(s.submittedAt)} · {s.docId ? 'accepted' : 'waiting for review'}</li>
             ))}
           </ul>
         </section>

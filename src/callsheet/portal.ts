@@ -57,7 +57,7 @@ export async function resolveCrewPortal(token: string, clock: Clock, db?: Tx) {
     select: { id: true, filename: true, statedExpiresOn: true, submittedAt: true, docId: true },
   });
   return {
-    event: role.event.name, role: role.name, vendor: role.vendor?.name ?? null,
+    event: role.event.name, timezone: role.event.timezone, role: role.name, vendor: role.vendor?.name ?? null,
     issue: last && {
       id: last.id, number: last.number, issuedAt: last.issuedAt, sheet: last.content as CallSheet,
       confirmedAt: last.receipt?.confirmedAt ?? null,
