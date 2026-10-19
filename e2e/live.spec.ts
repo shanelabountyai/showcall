@@ -43,6 +43,37 @@ async function editAndCommit(page: Page, label: string, fill: (form: Locator) =>
   await expect(row(page, label).getByRole('form')).toHaveCount(0);
 }
 
+/** The first bytes of a stream as the server sends them, read from Node for up to `ms`: for failure messages. */
+async function peek(path: string, ms = 2_500) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  let text = '';
+  try {
+    const res = await fetch(`http://localhost:4000${path}`, { signal: ac.signal });
+    text += `[${res.status} ${res.headers.get('content-type')}] `;
+    const reader = res.body!.getReader();
+    for (;;) { const { done, value } = await reader.read(); if (done) break; text += new TextDecoder().decode(value); }
+  } catch { /* the abort ends the read */ }
+  clearTimeout(t);
+  return text.slice(0, 600);
+}
+
+/** What each page shows, for a failure message: the chip and any alert. */
+async function diag(pages: Record<string, Page>, stream?: string) {
+  const out: string[] = [];
+  for (const [name, p] of Object.entries(pages)) {
+    const c = chip(p);
+    out.push(`${name}: chip=${await c.getAttribute('data-status').catch(() => '?')} seq=${await c.getAttribute('data-seq').catch(() => '?')} frames=${await c.getAttribute('data-frames').catch(() => '?')} alerts=${JSON.stringify(await p.getByRole('alert').allTextContents().catch(() => []))}`);
+  }
+  if (stream) out.push(`stream ${stream}: ${await peek(stream)}`);
+  return out.join('\n');
+}
+
+/** Run an expectation; on failure, add what the pages and the stream show. */
+async function explain(what: () => Promise<unknown>, pages: Record<string, Page>, stream?: string) {
+  try { await what(); } catch (e) { throw new Error(`${(e as Error).message}\n--- diagnosis ---\n${await diag(pages, stream)}`); }
+}
+
 /** Main-frame navigations, to prove an update arrived without one. */
 function navigations(page: Page) {
   let n = 0;
@@ -107,7 +138,10 @@ test.describe.serial('Showcall Live (S-30)', () => {
     });
     await commit(form);
 
-    await expect(B.locator(`article[data-row-id="${doorsId}"]`)).toHaveAttribute('data-start', String(doorsStart + 10), { timeout: 3_000 });
+    await explain(async () => {
+      await expect(row(A, 'Doors open').getByRole('form')).toHaveCount(0, { timeout: 3_000 });
+      await expect(B.locator(`article[data-row-id="${doorsId}"]`)).toHaveAttribute('data-start', String(doorsStart + 10), { timeout: 3_000 });
+    }, { A, B }, `/api/live/${eventId}/runsheet?since=0`);
     for (const [id, start] of depIds) await expect(B.locator(`article[data-row-id="${id}"]`)).toHaveAttribute('data-start', String(start + 10), { timeout: 1_000 });
     await expect(Bsheets.getByRole('region', { name: 'Doors & Registration', exact: true }).getByTestId('role-status')).toContainText('NEEDS RE-ISSUE', { timeout: 3_000 });
     for (const role of ['A1 Audio', 'Catering']) {
