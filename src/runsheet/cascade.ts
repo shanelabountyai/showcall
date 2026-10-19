@@ -67,7 +67,8 @@ async function warningsAt(tx: Tx, eventId: string, timings: Map<string, Timing>)
   return crewWarnings(rules, roles.map((r) => ({ id: r.id, name: r.name, cueIds: r.cues.map((c) => c.cueId) })), timings);
 }
 
-async function lockEvent(tx: Tx, eventId: string) {
+/** Serialise on the event row (D-037: the only lock the change-log bump takes, always last). */
+export async function lockEvent(tx: Tx, eventId: string) {
   const [row] = await tx.$queryRaw<{ runSheetVersion: number }[]>`SELECT "runSheetVersion" FROM "Event" WHERE id = ${eventId} FOR UPDATE`;
   if (!row) throw new Error(`No event ${eventId}`);
   return row.runSheetVersion;
@@ -152,10 +153,11 @@ export type RunSheetRow = { id: string; kind: 'session' | 'cue'; label: string; 
 
 /**
  * The run sheet as built: sessions from the pinned agenda version plus cues,
- * in time order. `stale` when the agenda has published past it.
+ * in time order. `stale` when the agenda has published past it. `db` lets a
+ * caller read it inside its own transaction (a live frame's snapshot, D-038).
  */
-export async function loadRunSheet(eventId: string) {
-  return prisma.$transaction(async (tx) => {
+export async function loadRunSheet(eventId: string, db?: Tx) {
+  const read = async (tx: Tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId } });
     const [sessions, cues, last] = await Promise.all([
       sessionsAt(tx, eventId, event.runSheetVersion),
@@ -171,5 +173,6 @@ export async function loadRunSheet(eventId: string) {
     const currentVersion = last?.number ?? 0;
     const warnings = await warningsAt(tx, eventId, timings);
     return { agendaVersion: event.runSheetVersion, currentVersion, stale: event.runSheetVersion < currentVersion, rows, problems, warnings };
-  });
+  };
+  return db ? read(db) : prisma.$transaction(read);
 }

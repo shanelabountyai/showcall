@@ -1,5 +1,5 @@
 import type { Clock } from '../clock';
-import { prisma } from '../db';
+import { prisma, type Tx } from '../db';
 import { loadRunSheet, type RunSheetRow } from '../runsheet/cascade';
 import { stageManagersOnDuty } from '../staffing/staffing';
 import { localNow, toDbDate } from '../time';
@@ -44,23 +44,23 @@ export function projectLive(rows: RunSheetRow[], marks: (Mark & { room: string }
   });
 }
 
-async function today(eventId: string, clock: Clock) {
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { rooms: true } });
+async function today(eventId: string, clock: Clock, db?: Tx) {
+  const event = await (db ?? prisma).event.findUniqueOrThrow({ where: { id: eventId }, include: { rooms: true } });
   const now = localNow(clock.now(), event.timezone);
-  const sheet = await loadRunSheet(eventId);
+  const sheet = await loadRunSheet(eventId, db);
   return { event, now, sheet, rows: sheet.rows.filter((r) => r.day === now.day) };
 }
 
-/** Everything the live view shows, as of the clock. Polled; reads only. */
-export async function liveShow(eventId: string, clock: Clock) {
-  const { event, now, sheet, rows } = await today(eventId, clock);
-  const marks = await prisma.liveMark.findMany({
+/** Everything the live view shows, as of the clock. Reads only; `db` reads it inside a live frame's snapshot (D-038). */
+export async function liveShow(eventId: string, clock: Clock, db?: Tx) {
+  const { event, now, sheet, rows } = await today(eventId, clock, db);
+  const marks = await (db ?? prisma).liveMark.findMany({
     where: { eventId, day: toDbDate(now.day) },
     orderBy: [{ markedAt: 'asc' }, { id: 'asc' }],
     include: { room: { select: { name: true } } },
   });
   const rooms = projectLive(rows, marks.map((m) => ({ ...m, room: m.room.name })), now.min);
-  return { eventName: event.name, day: now.day, nowMin: now.min, stale: sheet.stale, rooms };
+  return { eventName: event.name, timezone: event.timezone, day: now.day, nowMin: now.min, stale: sheet.stale, rooms };
 }
 
 /** A GO from someone who is not the room's stage manager today. Nothing was logged. */
@@ -72,13 +72,16 @@ export class GoRefused extends Error {}
  * that room (or event-wide) today (D-011).
  */
 export async function markGo(eventId: string, rowId: string, staffId: string, clock: Clock) {
-  const { event, now, rows } = await today(eventId, clock);
-  const row = rows.find((r) => r.id === rowId);
-  if (!row) throw new GoRefused(`No row ${rowId} on today's run sheet`);
-  const room = event.rooms.find((r) => r.name === row.room)!;
-  const onDuty = await stageManagersOnDuty(eventId, now.day, room.id);
-  if (!onDuty.some((a) => a.staffId === staffId)) throw new GoRefused(`Only the stage manager on duty in ${room.name} today can call GO`);
-  return prisma.liveMark.create({
-    data: { eventId, roomId: room.id, staffId, rowId, day: toDbDate(now.day), plannedMin: row.startMin, actualMin: now.min, markedAt: clock.now() },
+  // One transaction (D-037): the row is checked and the mark written from one read, and the change-log trigger runs inside it.
+  return prisma.$transaction(async (tx) => {
+    const { event, now, rows } = await today(eventId, clock, tx);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) throw new GoRefused(`No row ${rowId} on today's run sheet`);
+    const room = event.rooms.find((r) => r.name === row.room)!;
+    const onDuty = await stageManagersOnDuty(eventId, now.day, room.id);
+    if (!onDuty.some((a) => a.staffId === staffId)) throw new GoRefused(`Only the stage manager on duty in ${room.name} today can call GO`);
+    return tx.liveMark.create({
+      data: { eventId, roomId: room.id, staffId, rowId, day: toDbDate(now.day), plannedMin: row.startMin, actualMin: now.min, markedAt: clock.now() },
+    });
   });
 }
