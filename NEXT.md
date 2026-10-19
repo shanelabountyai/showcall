@@ -106,11 +106,23 @@ client against a production Next build with a fake stream in a local Chromium:
 EventSource catch-up after an offline drop (2 missed, none duplicated), and the row
 editor's conflict / re-preview flow. That probe found the controlled-select reset bug.
 
+## L1.0 spike result (2026-10-19, run by Shane in Chrome on the Mac)
+
+Route `app/api/spike/sse/route.ts` on throwaway branch `spike/sse` (958d117, deleted after),
+deployed as a Vercel **preview** with the CLI; `DEMO_ACCESS_PASSWORD` set for Preview.
+- (a) Fluid compute: **on** (Settings → Functions).
+- (b) `EventSource` connected behind HTTP Basic **with no second prompt** — the D-048
+  fetch-reader fallback is not needed; L1.5/L1.7 stay on `EventSource`.
+- (c) The platform cut each stream at about **300 s** (`maxDuration` 300; the spike did not set
+  `LIVE_MAX_MS`): ids 1–~300 on the first connection, ~301–600 on the second.
+- (d) Reconnect sent `Last-Event-ID` (the route echoed `lastEventIdHeader: "600"` and resumed
+  at `n` 601, `secondsOpen` reset), with no gap in ids.
+- (e) Preview deletion: Shane's step (Needs Shane).
+O-1 to O-7 confirmed by Shane, defaults kept (decisions.md, dated line).
+
 ## Needs Shane
 
-- L1.0 spike (Vercel CLI, Preview env password, fluid compute): (a)–(e) unrecorded,
-  including whether `EventSource` re-prompts behind HTTP Basic (D-048 names the fallback).
-- O-1 to O-7: confirm or change, with a dated line (exit criterion). All defaults built.
+- (e) Delete the spike preview `showcall-j4s3wtlcy-…vercel.app`: `vercel remove <url>` (L1.0 below).
 - Latency on the deployed site, and cost against D-034 (S-31).
 - The pre-existing `showcall.spec.ts` content turn-in failure in CI.
 - Local runs: add `LIVE_TEST_HOOKS=1` to `.env.test` (the reconnect e2e needs `?dropAfter=`).
