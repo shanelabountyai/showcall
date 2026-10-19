@@ -73,6 +73,18 @@ of those writes to a real ledger instead of having one added later — the
 same reasoning as D-012. See D-018 for the rest, including the P1 ranking.
 
 
+## Showcall Live — build log 11c (real-time run sheet)
+
+PRD `docs/live/prd-showcall-live.md`; tasks `docs/live/phase-1-tasks.md`; decisions D-035–D-047, open items O-1–O-7. L1.0 (the transport spike on a Vercel preview) runs before S-27 and needs Shane.
+
+| ID | Item | Status |
+|---|---|---|
+| S-27 | Change log: per-show `changeSeq` and append-only `ShowChange`, bumped by trigger in commit order, one per transaction (D-037); issue and GO inside transactions | ⬜ |
+| S-28 | Run-sheet row editor with "Editing as"; `Cue.rev` reject-and-refresh (`RowChanged`) on top of preview-equals-commit (D-039, D-044, D-045) | ⬜ |
+| S-29 | SSE stream: whole projection per frame at a seq, `Last-Event-ID` catch-up, per-subscriber projections, crew token re-checked each poll, lock state read never written, hidden-tab close, poll fallback (D-038, D-040–D-043, D-046) | ⬜ |
+| S-30 | Live gate: two-browser update, reconnect catch-up, concurrent-edit conflict, role-filter leak sweep on frames, latency p50/max, on the production build | ⬜ |
+| S-31 | Live phase 2: deployed via the `main-manual` hook, latency and cost measured against D-034, O-4/O-5 decided, DEMO stop | ⬜ |
+
 ---
 
 ## Security findings — saas-foundation audit (2026-09-23)
