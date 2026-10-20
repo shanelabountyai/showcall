@@ -56,6 +56,28 @@ model Event {
   crewRules       CrewRules?
   /// The agenda version the run sheet is built from; stale when behind (D-003).
   runSheetVersion Int                   @default(0)
+  /// Showcall Live (D-037): bumped once per committing transaction that touches anything a live view reads, by trigger.
+  changeSeq       Int                   @default(0)
+  changes         ShowChange[]
+}
+
+/// One committed change to a show (D-037): written by `bump_show_change`, one row per
+/// transaction per event, append-only by trigger. `kinds` is what the transaction
+/// touched (`cue`, `cue:<id>`, `go`, `issue`, …); the writing transaction may append to
+/// it, nothing else may change. `at` is database time (D-048). See the migration.
+model ShowChange {
+  id      String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  event   Event    @relation(fields: [eventId], references: [id])
+  eventId String
+  seq     Int
+  txid    BigInt
+  kinds   String[] @default([])
+  /// "Editing as" (D-044), from `showcall.actor`; '' when nobody was named.
+  actor   String   @default("")
+  at      DateTime @default(now())
+
+  @@unique([eventId, seq])
+  @@unique([eventId, txid])
 }
 
 /// Turnover between two sessions in a room is strike + reset.
@@ -208,6 +230,8 @@ model Cue {
   roles          CueRole[]
   plan           ContingencyPlan?
   load           LoadSlot?
+  /// Row revision (D-039): bumped by trigger on every write to the row. The row editor commits against it.
+  rev            Int              @default(0)
 
   @@index([eventId])
 }

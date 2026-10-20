@@ -890,3 +890,46 @@ validate recordings the way decks are validated.
 per-speaker consent". The build showed that consent has to be checked
 *where the file is served*, not only where the package is built, and that a
 shared recording needs every owner's yes.
+
+## Live run sheet (11c, S-27 to S-30)
+
+**Problem.** On show day the run sheet moves under people's feet, and every
+view of it was a page someone had to reload. Live mode re-rendered itself every
+five seconds. Nobody could edit one cue from the UI, so "two people on the same
+row" had nothing to collide on.
+
+**What it does.** Postgres stays the only truth. A trigger on every table a live
+view reads bumps a per-show `changeSeq` once per committing transaction and
+writes an append-only `ShowChange` row (who, what, when); the bump takes the
+event row lock, so seq order is commit order with no gaps (D-037, tested with
+two held-open transactions). Each open view holds one SSE stream that polls the
+seq once a second and, when it moves, sends the subscriber's whole projection
+read with the seq in one REPEATABLE READ snapshot (D-038). A view drops any
+frame at or below the seq it holds; a reconnect sends the current projection
+and, on producer views, the log rows it missed, once each. A new run-sheet row
+editor previews and commits against the row's `rev`; a second editor is refused
+with `RowChanged`, naming who moved it, with their typed values kept (D-039).
+Crew streams are built by `resolveCrewPortal` per subscriber and send only when
+that role's own projection changed, so another role's issue sends them nothing,
+not even a timing (D-040).
+
+**Measured.** Commit-to-visible in a second browser over 20 edits, production
+build on a GitHub runner, demo scale (CI run 39320395646): **p50 917 ms, max
+941 ms** (target ≤ 2 s / ≤ 3 s). Leak sweep through the real crew route: 0
+foreign ids, labels or rooms across 4 roles; frame counts 1/2/1/2 (connect +
+own re-issues only). Reconnect: 2 missed entries, 0 duplicates after a second
+drop. Conflict: 1 winner, 1 refusal, +2 log rows including the re-preview.
+
+**Defect found while building.** React resets a `<form action>` after the action
+returns, and the reset put the row editor's controlled `<select>` back on its
+first option: an anchored cue's commit went out with no anchor. The form now
+submits by hand.
+
+**What it deliberately does not do.** Character-level co-editing, offline
+writes, live drafts to crew, LISTEN/NOTIFY, authentication ("Editing as" is a
+picked name, D-044), or any claim at real-show scale. Not yet measured on the
+deployed site (S-31).
+
+**Verdict — producer review "a change reaches the room": validated, locally and
+in CI.** One poll interval is enough at demo scale; the deployed number and the
+cost are S-31's.

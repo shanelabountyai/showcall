@@ -1,10 +1,13 @@
 import { revalidatePath } from 'next/cache';
 import { notFound } from 'next/navigation';
-import { callSheetStatus, CallSheetsBlocked, issueCallSheets } from '@/src/callsheet/callsheet';
+import { CallSheetsBlocked, issueCallSheets } from '@/src/callsheet/callsheet';
 import { issueCrewLink, PortalRefused, setRoleVendor } from '@/src/callsheet/portal';
 import { systemClock } from '@/src/clock';
 import { prisma } from '@/src/db';
+import { buildFrame, type ProducerData } from '@/src/live/frames';
 import { IssueLink, type Issued } from '../../../issue-link';
+import { LiveChip, LiveProvider } from '../../../live-stream';
+import { RoleStatus } from './status';
 import { refusable } from '../refusable';
 
 export const dynamic = 'force-dynamic';
@@ -20,17 +23,19 @@ const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UT
 export default async function CallSheets({ params, searchParams }: { params: Promise<{ eventId: string }>; searchParams: Promise<{ error?: string; issued?: string }> }) {
   const { eventId } = await params;
   const { error, issued } = await searchParams;
-  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { name: true } });
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { name: true, timezone: true } });
   if (!event) notFound();
   const here = `/events/${eventId}/callsheets`;
-  const [status, roles, vendors] = await Promise.all([
-    callSheetStatus(eventId),
+  const [frame, roles, vendors] = await Promise.all([
+    buildFrame('runsheet', eventId, { clock: systemClock, since: null }),
     prisma.callRole.findMany({
       where: { eventId },
       select: { id: true, reportTo: true, vendorId: true, portalTokenHash: true, issues: { orderBy: { number: 'desc' }, take: 1, select: { receipt: { select: { confirmedAt: true } } } } },
     }),
     prisma.vendor.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);
+  if (!frame) notFound();
+  const status = (frame.data as ProducerData).callSheets;
   const byId = new Map(roles.map((r) => [r.id, r]));
 
   async function doIssue() {
@@ -55,7 +60,9 @@ export default async function CallSheets({ params, searchParams }: { params: Pro
 
   return (
     <main>
+      <LiveProvider url={`/api/live/${eventId}/runsheet`} initial={frame} timeZone={event.timezone}>
       <h1>{event.name} — call sheets</h1>
+      <LiveChip />
       {error && <p role="alert">{error}</p>}
       {issued && <p role="status">Call sheets issued: {issued}.</p>}
       <form action={doIssue}><button type="submit">Issue changed sheets</button></form>
@@ -66,12 +73,7 @@ export default async function CallSheets({ params, searchParams }: { params: Pro
         return (
           <section key={s.roleId} aria-label={s.role} style={{ border: '1px solid #ccc', padding: 8, marginBottom: 12 }}>
             <h2>{s.role}</h2>
-            <p>
-              {s.lastIssue === 0 ? 'Not issued yet' : `Issue ${s.lastIssue}`}
-              {s.stale && ' · NEEDS RE-ISSUE'}
-              {s.lastIssue > 0 && (confirmedAt ? ` · receipt confirmed ${stamp(confirmedAt)}` : ' · awaiting receipt')}
-            </p>
-            {s.warnings.length > 0 && <ul aria-label="Work rules">{s.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
+            <RoleStatus roleId={s.roleId} confirmedAt={confirmedAt ? stamp(confirmedAt) : null} />
             <form action={doVendor}>
               <input type="hidden" name="roleId" value={s.roleId} />
               <label>Vendor{' '}
@@ -86,6 +88,7 @@ export default async function CallSheets({ params, searchParams }: { params: Pro
           </section>
         );
       })}
+      </LiveProvider>
     </main>
   );
 }

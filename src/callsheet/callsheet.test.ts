@@ -126,6 +126,15 @@ describe('call sheets: no over-disclosure (hard rule 7)', () => {
 });
 
 describe('call-sheet issues', () => {
+  it('two concurrent issues: each changed role is issued once, and the one that waited issues nothing (L1.2)', async () => {
+    const { event, roles } = await scriptedShow();
+    const results = await Promise.all([issueCallSheets(event.id, clock), issueCallSheets(event.id, clock)]);
+    expect(results.map((r) => r.length).sort()).toEqual([0, Object.keys(roles).length]);
+    const issued = await prisma.callSheetIssue.findMany({ where: { role: { eventId: event.id } }, select: { roleId: true, number: true } });
+    expect(issued.map((i) => i.number)).toEqual(Object.keys(roles).map(() => 1));
+    expect(new Set(issued.map((i) => i.roleId)).size).toBe(Object.keys(roles).length);
+  });
+
   it('keynote moves 15 min: stale until rebased, then only the affected roles re-issue, with exact diffs', async () => {
     const { event, cues, moveKeynote } = await scriptedShow();
     expect((await issueCallSheets(event.id, clock)).map((i) => i.issue.number)).toEqual([1, 1, 1, 1]);

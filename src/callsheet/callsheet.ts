@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Clock } from '../clock';
-import { prisma } from '../db';
+import { prisma, type Tx } from '../db';
 import { renderBlocksPdf, type DocumentBlock } from '../pdf/render';
-import { loadRunSheet, type RunSheetRow } from '../runsheet/cascade';
+import { loadRunSheet, lockEvent, type RunSheetRow } from '../runsheet/cascade';
 import { hhmm, shortDay, type LocalDate } from '../time';
 
 /**
@@ -47,10 +47,10 @@ export function diffCallSheets(prev: CallSheet | null, next: CallSheet): CallShe
 /** The run sheet is behind the agenda or has problems. Nothing was issued. */
 export class CallSheetsBlocked extends Error {}
 
-async function drafts(eventId: string) {
+async function drafts(eventId: string, db?: Tx) {
   const [sheet, roles] = await Promise.all([
-    loadRunSheet(eventId),
-    prisma.callRole.findMany({
+    loadRunSheet(eventId, db),
+    (db ?? prisma).callRole.findMany({
       where: { eventId }, orderBy: { name: 'asc' },
       include: { cues: { select: { cueId: true } }, issues: { orderBy: { number: 'desc' }, take: 1, include: { receipt: true } } },
     }),
@@ -73,8 +73,8 @@ async function drafts(eventId: string) {
  * issue. A sheet a rebase left unchanged is current, whatever version it
  * records. `changes` is measured against the run sheet as pinned.
  */
-export async function callSheetStatus(eventId: string) {
-  const { sheet, roles } = await drafts(eventId);
+export async function callSheetStatus(eventId: string, db?: Tx) {
+  const { sheet, roles } = await drafts(eventId, db);
   return roles.map(({ role, last, prev, content, changed }) => ({
     roleId: role.id, role: role.name, lastIssue: last?.number ?? 0,
     stale: !!last && (sheet.stale || changed),
@@ -92,19 +92,24 @@ export async function callSheetStatus(eventId: string) {
  * problems: a sheet issued from it would send out times that are wrong.
  */
 export async function issueCallSheets(eventId: string, clock: Clock) {
-  const { sheet, roles } = await drafts(eventId);
-  if (sheet.stale) throw new CallSheetsBlocked(`The run sheet is built from agenda v${sheet.agendaVersion}; rebase it onto v${sheet.currentVersion} before issuing call sheets`);
-  if (sheet.problems.length) throw new CallSheetsBlocked(`The run sheet has problems:\n${sheet.problems.map((p) => p.message).join('\n')}`);
-  const issued = [];
-  // ponytail: one role per insert, no event lock — a concurrent issue collides on (roleId, number) and fails; lock the event if two producers issue at once.
-  for (const { role, last, prev, content, changed } of roles) {
-    if (!changed) continue;
-    const issue = await prisma.callSheetIssue.create({
-      data: { roleId: role.id, number: (last?.number ?? 0) + 1, agendaVersion: sheet.agendaVersion, content, issuedAt: clock.now() },
-    });
-    issued.push({ role: role.name, issue, diff: diffCallSheets(prev, content) });
-  }
-  return issued;
+  // Under the event lock (D-037): a second, concurrent issue waits, then reads
+  // the sheets the first one issued and finds nothing changed. Each issue is a
+  // change-log writer, so its trigger runs inside this transaction.
+  return prisma.$transaction(async (tx) => {
+    await lockEvent(tx, eventId);
+    const { sheet, roles } = await drafts(eventId, tx);
+    if (sheet.stale) throw new CallSheetsBlocked(`The run sheet is built from agenda v${sheet.agendaVersion}; rebase it onto v${sheet.currentVersion} before issuing call sheets`);
+    if (sheet.problems.length) throw new CallSheetsBlocked(`The run sheet has problems:\n${sheet.problems.map((p) => p.message).join('\n')}`);
+    const issued = [];
+    for (const { role, last, prev, content, changed } of roles) {
+      if (!changed) continue;
+      const issue = await tx.callSheetIssue.create({
+        data: { roleId: role.id, number: (last?.number ?? 0) + 1, agendaVersion: sheet.agendaVersion, content, issuedAt: clock.now() },
+      });
+      issued.push({ role: role.name, issue, diff: diffCallSheets(prev, content) });
+    }
+    return issued;
+  }, { timeout: 15_000 });
 }
 
 const when = (r: CallSheetRow) => `${hhmm(r.startMin)}–${hhmm(r.endMin)} ${shortDay(r.day)}`;
