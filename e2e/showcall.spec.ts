@@ -142,6 +142,10 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
       await page.getByRole('button', { name: 'Add deliverable' }).click();
 
       const keiko = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Keiko Brandt/ }) });
+      // "Add deliverable" ends in a server redirect that re-renders this page. Keiko's section is
+      // already on screen before it lands, so without this wait the link can be issued first and
+      // the re-render then drops the one-time link from the form state (the CI flake on line 146).
+      await expect(keiko.getByRole('heading', { name: 'Staffing models deck (deck)' })).toBeVisible();
       await keiko.getByRole('button', { name: 'Issue portal link' }).click();
       await expect(page.getByRole('status')).toContainText('copy it now');
       expect(page.url()).not.toContain('link='); // SEC-04: the token is never in a URL

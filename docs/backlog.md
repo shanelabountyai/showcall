@@ -79,10 +79,10 @@ PRD `docs/live/prd-showcall-live.md`; tasks `docs/live/phase-1-tasks.md`; decisi
 
 | ID | Item | Status |
 |---|---|---|
-| S-27 | Change log: per-show `changeSeq` and append-only `ShowChange`, bumped by trigger in commit order, one per transaction (D-037); issue and GO inside transactions | ⬜ |
-| S-28 | Run-sheet row editor with "Editing as"; `Cue.rev` reject-and-refresh (`RowChanged`) on top of preview-equals-commit (D-039, D-044, D-045) | ⬜ |
-| S-29 | SSE stream: whole projection per frame at a seq, `Last-Event-ID` catch-up, per-subscriber projections, crew token re-checked each poll, lock state read never written, hidden-tab close, poll fallback (D-038, D-040–D-043, D-046) | ⬜ |
-| S-30 | Live gate: two-browser update, reconnect catch-up, concurrent-edit conflict, role-filter leak sweep on frames, latency p50/max, on the production build | ⬜ |
+| S-27 | Change log: per-show `changeSeq` and append-only `ShowChange`, bumped by trigger in commit order, one per transaction (D-037); issue and GO inside transactions | ✅ |
+| S-28 | Run-sheet row editor with "Editing as"; `Cue.rev` reject-and-refresh (`RowChanged`) on top of preview-equals-commit (D-039, D-044, D-045) | ✅ |
+| S-29 | SSE stream: whole projection per frame at a seq, `Last-Event-ID` catch-up, per-subscriber projections, crew token re-checked each poll, lock state read never written, hidden-tab close, poll fallback (D-038, D-040–D-043, D-046) | ✅ |
+| S-30 | Live gate: two-browser update, reconnect catch-up, concurrent-edit conflict, role-filter leak sweep on frames, latency p50/max, on the production build | ✅ CI run 39352817297 (ae25511): live specs and story spec green, 38/38 e2e twice; p50 917 ms, max 941 ms (CI runner) |
 | S-31 | Live phase 2: deployed via the `main-manual` hook, latency and cost measured against D-034, O-4/O-5 decided, DEMO stop | ⬜ |
 
 ---

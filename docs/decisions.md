@@ -1106,6 +1106,23 @@ propose `src/live/stream.ts` (poll loop, `Last-Event-ID` resume, hidden-tab and 
 close) to saas-foundation's backlog as a `realtime` module. That proposal is made there,
 not in this repo.
 
+## D-048 · 2026-10-19 · Live phase 1 build notes: log time, first connect, kinds
+
+Three things the kit left open, settled while building S-27 to S-29 on the defaults:
+
+- **`ShowChange.at` is database time** (`now()`, the transaction's start). A trigger cannot
+  see the injected clock (hard rule 3 covers application code). No rule reads `at`; it is
+  shown as "when" in `RowChanged` and in the "while you were away" list, in venue time.
+- **The first connect carries `?since=<seq>`.** `EventSource` sends `Last-Event-ID` only on
+  its own reconnects, and the page has already rendered the frame at seq N server-side, so
+  the client opens with `?since=N`. The header wins when both are present. `since` names a
+  seq, not an audience: the route test allows exactly `since` and the hook `dropAfter`.
+- **`bump_show_change(event_id, VARIADIC kinds)`.** A cue write records `cue` and `cue:<id>`,
+  so `RowChanged` can name who last wrote the row (D-039). Kinds are de-duplicated per row.
+
+If L1.0 (b) finds `EventSource` re-prompts behind HTTP Basic, the fallback is the same-origin
+`fetch` reader and is recorded as D-049; nothing above changes.
+
 ## Open — Showcall Live, need Shane's call (defaults are in force until changed)
 
 | # | Question | Default in force | Why it is open |
@@ -1117,3 +1134,8 @@ not in this repo.
 | O-5 | Neon while a view is open | **Accept** compute awake while any stream is open. Hidden tabs disconnect. | Measured in S-31 against D-034's baseline. If over, raise the poll to 2 s or move to C. |
 | O-6 | Who may edit a row | **Producer or stage manager assigned to the event**, by "Editing as" (D-044) | Could be producers only, or anyone with the password |
 | O-7 | Model per item | **Opus** for S-27 (triggers, seq) and S-29 (stream, catch-up); Sonnet for S-28's UI and S-30's tests, per D-005's split | Shane's pick, as D-005 was |
+
+**Confirmed 2026-10-19 by Shane:** O-1 to O-7 all keep their defaults (A: SSE + seq poll;
+reject-and-refresh per row; issued sheets only, tick off; 1000 ms / 280 000 ms / 300 s;
+Neon awake while a stream is open; producer or SM assigned to the event; Opus for S-27/S-29,
+Sonnet for S-28/S-30). O-4 and O-5 are revisited with the S-31 measurements.

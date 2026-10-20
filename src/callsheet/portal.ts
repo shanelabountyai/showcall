@@ -1,7 +1,7 @@
 import { recordDoc } from '../budget/compliance';
 import type { Clock } from '../clock';
 import { MAX_UPLOAD_BYTES, type Upload } from '../content/pipeline';
-import { prisma } from '../db';
+import { prisma, type Tx } from '../db';
 import { hashToken, linkLive, newToken } from '../portal';
 import { cateringRollup } from '../rfp/needs';
 import { fromDbDate, localNow, toDbDate, type LocalDate } from '../time';
@@ -31,28 +31,33 @@ export async function setRoleVendor(eventId: string, roleId: string, vendorId: s
 }
 
 /** The live link's role, or null — a bad, replaced or expired link all look the same. */
-async function roleOf(token: string, clock: Clock) {
+async function roleOf(token: string, clock: Clock, db?: Tx) {
   if (!token) return null;
-  const role = await prisma.callRole.findUnique({
+  const role = await (db ?? prisma).callRole.findUnique({
     where: { portalTokenHash: hashToken(token) },
     include: { event: { select: { name: true, endDate: true, timezone: true } }, vendor: { select: { id: true, name: true } } },
   });
   return role && linkLive(role.event, clock) ? role : null;
 }
 
-/** What the portal page shows. Never the live projection: only what was issued. */
-export async function resolveCrewPortal(token: string, clock: Clock) {
-  const role = await roleOf(token, clock);
+/** The live link's event, or null: what a crew stream re-checks on every poll (D-040). */
+export async function crewLinkEvent(token: string, clock: Clock) {
+  return (await roleOf(token, clock))?.eventId ?? null;
+}
+
+/** What the portal page shows. Never the live projection: only what was issued. `db` reads it inside a live frame's snapshot (D-038). */
+export async function resolveCrewPortal(token: string, clock: Clock, db?: Tx) {
+  const role = await roleOf(token, clock, db);
   if (!role) return null;
-  const [last, prev] = await prisma.callSheetIssue.findMany({
+  const [last, prev] = await (db ?? prisma).callSheetIssue.findMany({
     where: { roleId: role.id }, orderBy: { number: 'desc' }, take: 2, include: { receipt: true },
   });
-  const coi = role.vendor && await prisma.coiSubmission.findMany({
+  const coi = role.vendor && await (db ?? prisma).coiSubmission.findMany({
     where: { roleId: role.id }, orderBy: { submittedAt: 'desc' },
     select: { id: true, filename: true, statedExpiresOn: true, submittedAt: true, docId: true },
   });
   return {
-    event: role.event.name, role: role.name, vendor: role.vendor?.name ?? null,
+    event: role.event.name, timezone: role.event.timezone, role: role.name, vendor: role.vendor?.name ?? null,
     issue: last && {
       id: last.id, number: last.number, issuedAt: last.issuedAt, sheet: last.content as CallSheet,
       confirmedAt: last.receipt?.confirmedAt ?? null,
