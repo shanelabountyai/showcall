@@ -1,4 +1,5 @@
 import { prisma } from '@/src/db';
+import { downloadHeaders } from '@/src/download';
 
 /** A portal-uploaded COI's bytes, scoped to the event in the path; always a download, never rendered inline. */
 export async function GET(_req: Request, { params }: { params: Promise<{ eventId: string; id: string }> }) {
@@ -6,10 +7,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ eventId
   const s = await prisma.coiSubmission.findFirst({ where: { id, role: { eventId } } });
   if (!s) return new Response('Not found', { status: 404 });
   return new Response(Buffer.from(s.bytes), {
-    headers: {
-      'Content-Type': s.mimeType,
-      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(s.filename)}`,
-      'X-Content-Type-Options': 'nosniff',
-    },
+    headers: downloadHeaders(s.filename, s.mimeType),
   });
 }
