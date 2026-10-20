@@ -32,9 +32,9 @@ export function localNow(at: Date, timeZone: string): { day: LocalDate; min: num
   return { day: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) * 60 + Number(p.minute) };
 }
 
-/** '09:05' (an `<input type="time">` value) → 545. */
+/** '09:05' (an `<input type="time">` value) → 545. A wall-clock time only: '24:00' and '9:75' are not times. */
 export const fromHhmm = (s: string) => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s);
   if (!m) throw new Error(`Not a time: ${s}`);
   return Number(m[1]) * 60 + Number(m[2]);
 };
