@@ -1,5 +1,23 @@
 # Next
 
+## ▶ Next: Shane reviews `docs/live/phase-2-tasks.md` (S-31), then merges PR #2 → PR #1
+
+**2026-10-19 (cloud session): the story-spec failure is fixed and S-30's gate is green.**
+`e2e/showcall.spec.ts:146` ("content turn-in … issues a link") was not time-of-day: "Add
+deliverable" ends in a server `redirect()` that re-renders the page, Keiko's section is on
+screen before it lands, and the test clicked "Issue portal link" first, so the re-render
+dropped the one-time link from the form state. The test now waits for the new
+"Staffing models deck (deck)" heading (ae25511, test-only, no expected value changed).
+CI run **39352817297** on ae25511: `ci` success, `e2e` **38 passed** on attempt 1 and
+**38 passed** again on a re-run (attempt 2). Backlog S-30 ✅.
+
+`docs/live/phase-2-tasks.md` is written (L2.1–L2.6) and nothing in it is started. Before
+L2.1: merge order (PR #2 into `live-kickoff`, then PR #1 into `main`, since the hook deploys
+`main`), who triggers the `main-manual` hook (D-033), and where the GB-hour and Neon numbers
+are read. Remaining measurement is S-31 (deployed latency and cost, D-034).
+
+---
+
 **Showcall Live phase 1 (S-27 to S-30) is built on branch `live-phase-1`, PR #2 into
 `live-kickoff` (not merged).** Shane approved building it unattended on a branch (2026-10-19), skipping
 the plan gate's wait but not its plan: the plan is below, written before any code.
@@ -124,7 +142,6 @@ O-1 to O-7 confirmed by Shane, defaults kept (decisions.md, dated line).
 
 - (e) Delete the spike preview `showcall-j4s3wtlcy-…vercel.app`: `vercel remove <url>` (L1.0 below).
 - Latency on the deployed site, and cost against D-034 (S-31).
-- The pre-existing `showcall.spec.ts` content turn-in failure in CI.
 - Local runs: add `LIVE_TEST_HOOKS=1` to `.env.test` (the reconnect e2e needs `?dropAfter=`).
 
 ## Next item
