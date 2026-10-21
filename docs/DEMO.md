@@ -73,6 +73,18 @@ Start from a fresh seed. Two browser windows side by side (a second profile or a
 | 4. Catch-up | B: turn the network off (DevTools → Offline), make two edits in A, turn it back on | "B comes back with both edits on the sheet and a *while you were away* list naming them, once each. Drop it again with nothing new: the list does not grow." |
 | 5. The crew side | Issue an A1 Audio link (Call sheets → **Issue portal link**), open it in B. In A, edit **Lunch service** and **Issue changed sheets**, then edit **Walk-in music** and issue | "Catering's re-issue sends A1 Audio's portal nothing at all, not even a heartbeat it could time. Its own re-issue appears in a few seconds. Crew see issued sheets, never drafts." |
 
+**On the deployed site** (`showcall.labintelligence.co`, behind the demo password): the
+same five stops work unchanged — measured there at p50 1553 ms / max 2770 ms over 20 edits
+(S-31, within the ≤ 2 s / ≤ 3 s target; CI's own number is 917 ms / 941 ms, so expect the
+deployed site to read visibly slower than a local recording). Two things to check before
+using the live site for this: (1) **"Editing as" needs the venue clock inside the event's
+dates** — the seeded event's day 1 is "today" only as of the last reseed, so a stale demo
+silently shows "no producer or stage manager is assigned today" with no other symptom
+(D-050); reseed (`SHOWCALL_ALLOW_CLOUD_DB=1 npx tsx prisma/seed.ts`, wipes first) if it's
+been a while. (2) **Deploy, then migrate** — the `main-manual` hook never runs migrations
+on its own (D-049), so a push that adds one needs `prisma migrate deploy` run against
+production separately, before trusting the deployed site for anything.
+
 ## Troubleshooting
 
 | Symptom | Fix |

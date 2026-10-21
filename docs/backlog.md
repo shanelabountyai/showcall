@@ -83,7 +83,7 @@ PRD `docs/live/prd-showcall-live.md`; tasks `docs/live/phase-1-tasks.md`; decisi
 | S-28 | Run-sheet row editor with "Editing as"; `Cue.rev` reject-and-refresh (`RowChanged`) on top of preview-equals-commit (D-039, D-044, D-045) | ✅ |
 | S-29 | SSE stream: whole projection per frame at a seq, `Last-Event-ID` catch-up, per-subscriber projections, crew token re-checked each poll, lock state read never written, hidden-tab close, poll fallback (D-038, D-040–D-043, D-046) | ✅ |
 | S-30 | Live gate: two-browser update, reconnect catch-up, concurrent-edit conflict, role-filter leak sweep on frames, latency p50/max, on the production build | ✅ CI run 39352817297 (ae25511): live specs and story spec green, 38/38 e2e twice; p50 917 ms, max 941 ms (CI runner) |
-| S-31 | Live phase 2: deployed via the `main-manual` hook, latency and cost measured against D-034, O-4/O-5 decided, DEMO stop | ⬜ |
+| S-31 | Live phase 2: deployed via the `main-manual` hook, latency and cost measured against D-034, O-4/O-5 decided, DEMO stop | ✅ deployed (D-049 fixed an outage en route); p50 1553 ms, max 2770 ms deployed; Neon ~27 min compute for a one-hour 3-view demo; Vercel $0.055/day; O-4/O-5 confirmed on defaults (D-051) |
 
 ---
 

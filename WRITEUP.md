@@ -956,5 +956,27 @@ does rotate near its designed interval and the client reconnects with no visible
 disruption. **Not exercised this run:** the explicit 0-lost/0-duplicated check across an
 edit made during the gap — the chip-attribute polling this script used never caught a
 transient "not live" state to anchor that edit to, so a more direct instrument (a network
-listener on the page, not a DOM attribute poll) is needed to finish this cleanly. L2.4
-(one-hour cost run) is still open.
+listener on the page, not a DOM attribute poll) is needed to finish this cleanly.
+
+**L2.4, one-hour cost run (2026-10-20 00:53–01:53 UTC).** Three views open (producer, SM,
+crew portal) the whole hour, 12 edits (net zero) five minutes apart, all committed
+cleanly.
+
+- **Neon:** `compute_time_seconds` 50956 → 52568, **+1612 s (~26.9 min)** of billed
+  compute for the hour the views were open. Well under D-034's prior baseline of ~2.1
+  compute-hours/day from the old per-minute cron. `active_time_seconds` moved further
+  (+6420 s), but this session's check of the "after" number landed ~13.7 h after the run
+  ended (a gap in resuming this session, not a measurement choice), so that figure is not
+  a clean isolate of the hour — `compute_time_seconds` is the closer proxy to what Neon
+  bills. The endpoint did not stay awake across that whole 13.7 h gap (only ~27 min of
+  compute logged), consistent with normal idle auto-suspend.
+- **Vercel:** usage is reported at day granularity only (confirmed empirically — `vercel
+  usage --from/--to` has no finer window), so the hour cannot be isolated from the rest of
+  this session's deploy/migrate/L2.2/L2.3 activity on the same UTC day. For the whole day:
+  Fluid Provisioned Memory 3.29 GB-hour ($0.035), Fluid Active CPU 0.041 h ($0.0053),
+  Build CPU 4 min ($0.014, the one deploy), everything else near zero. **Total for the
+  entire day's testing: $0.055** — a sliver of the $20 Pro allocation.
+
+**Verdict on O-4/O-5:** both measured well inside their targets (latency, Neon compute,
+Vercel cost all low). Recorded as a dated decision once Shane confirms whether to keep the
+defaults — see D-051.

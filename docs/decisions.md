@@ -1172,3 +1172,15 @@ recorded in WRITEUP.md.
 calendar, with no error or alarm — it just quietly stops being demoable as a live app. A
 demo close to a real audience date should reseed production first; there is no scheduled
 reseed.
+
+## D-051 · 2026-10-21 · O-4 and O-5 confirmed on their defaults (S-31 measurements)
+
+Shane confirmed both from the L2.2–L2.4 numbers (WRITEUP.md): deployed latency p50
+1553 ms / max 2770 ms (target ≤ 2 s / ≤ 3 s), Neon ~27 min compute for the one-hour
+three-view demo (against D-034's prior ~2.1 compute-hours/day baseline), Vercel $0.055 for
+the whole test day. Nothing was close enough to a target to justify tuning.
+
+- **O-4:** `LIVE_POLL_MS` 1000, `LIVE_MAX_MS` 280 000, `maxDuration` 300 — unchanged.
+- **O-5:** Neon staying awake while a stream is open — accepted, unchanged.
+
+Backlog S-30 and S-31 ✅ (phase 2 gate closed).
