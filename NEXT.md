@@ -1,21 +1,28 @@
 # Next
 
-## ▶ Next: S-31 phase 2 — L2.2 (two-browser latency), L2.3 (stream life in the wild), L2.4 (one-hour cost run)
+## ▶ Next: S-31 phase 2 — L2.3 (stream life in the wild), L2.4 (one-hour cost run)
 
-**2026-10-20: phase 1 merged to `main` and deployed; an outage from it is fixed (D-049).**
-Both PRs merged (PR #2 → `live-kickoff`, PR #1 → `main`); CI green on `main`
-(run 39441222459). `main-manual` hook triggered, deployed as `dpl_AU5UwsALio9DKeGCEFVANdULjiWt`
-(commit 6e7aaf2), but it shipped ahead of its own migrations — production 500'd on every
-page from 14:22 to 19:19 CDT until the two pending migrations were applied directly
-(D-049). Confirmed back at 200. **L2.1 is done.**
+**2026-10-20: phase 1 live and measured; two production incidents hit and fixed along the
+way (D-049, D-050).** Both PRs merged (PR #2 → `live-kickoff`, PR #1 → `main`); CI green on
+`main`. `main-manual` hook deployed `dpl_AU5UwsALio9DKeGCEFVANdULjiWt` (commit 6e7aaf2), but
+shipped ahead of its own migrations — production 500'd from 14:22 to 19:19 CDT until the
+two pending migrations were applied directly (D-049). Then found the demo event's seed
+dates had drifted into the past (Sep 24/25), so "Editing as" never resolved anyone and live
+editing couldn't be exercised at all; reseeded production with today-dated data (D-050).
+**L2.1 and L2.2 are done** — deployed latency p50 1553 ms / max 2770 ms over 20 edits,
+within target, written up in WRITEUP.md. Production is now the Northwind Leadership Summit,
+2026-10-20/21.
 
-Remaining phase 2 (`docs/live/phase-2-tasks.md`): L2.2 (20-edit latency against the
-deployed site — blocked once this session by the auto-mode classifier on writing to the
-production demo DB; needs either Shane's own Chrome or a scoped permission, see D-049's
-sibling discussion in this session), L2.3 (leave a stream open past 300 s in the wild),
-L2.4 (one-hour cost run — Vercel GB-hours + Neon compute-hours; Neon baseline read this
-session: project `restless-term-77017763`, `active_time` 53904 s before any measurement
-window), L2.5 (Shane decides O-4/O-5 from the numbers), L2.6 (docs).
+Remaining phase 2 (`docs/live/phase-2-tasks.md`): L2.3 (leave a stream open past 300 s in
+the wild, confirm the reconnect), L2.4 (one-hour cost run — Vercel GB-hours + Neon
+compute-hours; Neon baseline read before any measurement window: project
+`restless-term-77017763`, `active_time` 53904 s), L2.5 (Shane decides O-4/O-5 from the
+numbers), L2.6 (docs — DEMO.md stop, backlog S-30/S-31 ✅).
+
+This session added two scoped Bash permission rules to `.claude/settings.local.json`
+(gitignored, local-only) for the production Neon connection string, `prisma migrate
+deploy`, and `prisma/seed.ts` against the cloud DB — worth revisiting whether to keep them
+or narrow them once phase 2 closes out.
 
 **2026-10-19 (cloud session): the story-spec failure is fixed and S-30's gate is green.**
 `e2e/showcall.spec.ts:146` ("content turn-in … issues a link") was not time-of-day: "Add

@@ -1156,3 +1156,19 @@ migration, run `SHOWCALL_ALLOW_CLOUD_DB=1 DATABASE_URL=<neon direct url> npx pri
 status` against production first (or just run `migrate deploy`, since it is a no-op when
 there is nothing pending) — the hook order is **migrate, then deploy**, never the reverse.
 No migration pending this cycle means this step is a no-op, not something to skip checking.
+
+## D-050 · 2026-10-20 · Production reseeded for L2.2; "Editing as" needs the venue clock inside the event's dates
+
+The production demo event was still dated 2026-09-24/25 (last seeded D-032). `seed.ts`
+computes day 1 as today at seed time, so once the real calendar moved past the event,
+nobody was ever "assigned today" (D-044) and `/runsheet`'s "Editing as" nav always read "no
+producer or stage manager is assigned today" — live editing could not be exercised on the
+deployed site at all, independent of S-31. Fixed by reseeding production
+(`SHOWCALL_ALLOW_CLOUD_DB=1 npx tsx prisma/seed.ts`, which wipes first by design): the
+Northwind Leadership Summit is now 2026-10-20/21. L2.2 ran immediately after and is
+recorded in WRITEUP.md.
+
+**Standing implication:** the deployed demo's "today" drifts out from under it on a normal
+calendar, with no error or alarm — it just quietly stops being demoable as a live app. A
+demo close to a real audience date should reseed production first; there is no scheduled
+reseed.

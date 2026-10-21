@@ -933,3 +933,15 @@ deployed site (S-31).
 **Verdict — producer review "a change reaches the room": validated, locally and
 in CI.** One poll interval is enough at demo scale; the deployed number and the
 cost are S-31's.
+
+**Deployed (S-31, L2.1/L2.2, 2026-10-20).** The `main-manual` hook deploys the app but
+does not migrate: phase 1 shipped ahead of its two migrations and the live site 500'd for
+~5 hours until they were applied directly against production (D-049). Commit-to-visible
+over the same 20 edits, now from a real browser against the deployed site (not the CI
+runner): **p50 1553 ms, max 2770 ms** (still within target ≤ 2 s / ≤ 3 s), against CI's
+917 ms / 941 ms — the gap is real network round-trip, not a regression. The production
+demo event's seed dates had also drifted into the past (Sep 24/25, "Editing as" resolves
+nobody once the venue clock moves past the event), so the production DB was reseeded with
+today-dated data before this measurement; the edit sequence alternates +5/-5 and nets zero,
+so the deployed demo content is otherwise unchanged. L2.3 (stream life in the wild) and
+L2.4 (one-hour cost run) are still open.
