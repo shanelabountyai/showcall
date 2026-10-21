@@ -36,10 +36,11 @@ onward); this is the closure summary.
   exercised (chip-attribute polling never caught a visible disconnect to anchor it to —
   would need a network listener instead of DOM polling to finish properly). Low priority;
   flag if it matters later.
-- **This session's two scoped Bash permission rules** in `.claude/settings.local.json`
-  (gitignored, local-only) for the production Neon connection string and `prisma migrate
-  deploy`/`prisma/seed.ts` against the cloud DB are still there — narrow or remove them if
-  this kind of production access won't be needed again soon.
+- **This session's three standing Bash permission rules** for production access (the Neon
+  connection string, `prisma migrate deploy`, and `prisma/seed.ts` against the cloud DB —
+  the last one wipes all data first) were removed from `.claude/settings.local.json` after
+  the fact, once noticed they'd persist silently across sessions. Production access goes
+  back to asking each time; re-add deliberately if a future session needs it again.
 
 ## Shipped project (closure 2026-09-25)
 
