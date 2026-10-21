@@ -1139,3 +1139,20 @@ If L1.0 (b) finds `EventSource` re-prompts behind HTTP Basic, the fallback is th
 reject-and-refresh per row; issued sheets only, tick off; 1000 ms / 280 000 ms / 300 s;
 Neon awake while a stream is open; producer or SM assigned to the event; Opus for S-27/S-29,
 Sonnet for S-28/S-30). O-4 and O-5 are revisited with the S-31 measurements.
+
+## D-049 · 2026-10-20 · L2.1 outage: the `main-manual` hook does not migrate; fix and restore note
+
+Triggering the `main-manual` deploy hook (D-033) for the merged `main` (phase 1, S-27 to
+S-30) shipped code that reads `Event.changeSeq` before that column existed on the
+production Neon database — the hook builds and deploys the app only, it does not run
+`prisma migrate deploy`. Every page 500'd from 14:22 to 19:19 CDT (`P2022 ColumnNotFound`,
+confirmed via `vercel logs`). Fixed by applying the two pending migrations
+(`20261019120000_show_change_log`, `20261019130000_cue_rev`, both additive, no
+drops/truncates) directly against Neon with `SHOWCALL_ALLOW_CLOUD_DB=1`. Confirmed back at
+200 afterward.
+
+**Restore / standing rule:** before triggering `main-manual` for any change that adds a
+migration, run `SHOWCALL_ALLOW_CLOUD_DB=1 DATABASE_URL=<neon direct url> npx prisma migrate
+status` against production first (or just run `migrate deploy`, since it is a no-op when
+there is nothing pending) — the hook order is **migrate, then deploy**, never the reverse.
+No migration pending this cycle means this step is a no-op, not something to skip checking.

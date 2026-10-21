@@ -1,6 +1,21 @@
 # Next
 
-## ▶ Next: Shane reviews `docs/live/phase-2-tasks.md` (S-31), then merges PR #2 → PR #1
+## ▶ Next: S-31 phase 2 — L2.2 (two-browser latency), L2.3 (stream life in the wild), L2.4 (one-hour cost run)
+
+**2026-10-20: phase 1 merged to `main` and deployed; an outage from it is fixed (D-049).**
+Both PRs merged (PR #2 → `live-kickoff`, PR #1 → `main`); CI green on `main`
+(run 39441222459). `main-manual` hook triggered, deployed as `dpl_AU5UwsALio9DKeGCEFVANdULjiWt`
+(commit 6e7aaf2), but it shipped ahead of its own migrations — production 500'd on every
+page from 14:22 to 19:19 CDT until the two pending migrations were applied directly
+(D-049). Confirmed back at 200. **L2.1 is done.**
+
+Remaining phase 2 (`docs/live/phase-2-tasks.md`): L2.2 (20-edit latency against the
+deployed site — blocked once this session by the auto-mode classifier on writing to the
+production demo DB; needs either Shane's own Chrome or a scoped permission, see D-049's
+sibling discussion in this session), L2.3 (leave a stream open past 300 s in the wild),
+L2.4 (one-hour cost run — Vercel GB-hours + Neon compute-hours; Neon baseline read this
+session: project `restless-term-77017763`, `active_time` 53904 s before any measurement
+window), L2.5 (Shane decides O-4/O-5 from the numbers), L2.6 (docs).
 
 **2026-10-19 (cloud session): the story-spec failure is fixed and S-30's gate is green.**
 `e2e/showcall.spec.ts:146` ("content turn-in … issues a link") was not time-of-day: "Add
