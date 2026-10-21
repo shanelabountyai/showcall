@@ -13,9 +13,14 @@ editing couldn't be exercised at all; reseeded production with today-dated data 
 within target, written up in WRITEUP.md. Production is now the Northwind Leadership Summit,
 2026-10-20/21.
 
-Remaining phase 2 (`docs/live/phase-2-tasks.md`): L2.3 (leave a stream open past 300 s in
-the wild, confirm the reconnect), L2.4 (one-hour cost run — Vercel GB-hours + Neon
-compute-hours; Neon baseline read before any measurement window: project
+**L2.3 is partial** — confirmed via server logs the deployed stream reconnects near its
+280 s design point with no visible UI disruption and no errors, but the chip-attribute
+polling this session used never caught a disconnect to anchor the 0-lost/0-duplicated
+check to; redo with a network listener instead of DOM polling if that assertion matters
+before closing S-31. Details in WRITEUP.md.
+
+Remaining phase 2 (`docs/live/phase-2-tasks.md`): L2.4 (one-hour cost run — Vercel
+GB-hours + Neon compute-hours; Neon baseline read before any measurement window: project
 `restless-term-77017763`, `active_time` 53904 s), L2.5 (Shane decides O-4/O-5 from the
 numbers), L2.6 (docs — DEMO.md stop, backlog S-30/S-31 ✅).
 

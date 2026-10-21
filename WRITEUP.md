@@ -943,5 +943,18 @@ runner): **p50 1553 ms, max 2770 ms** (still within target ≤ 2 s / ≤ 3 s), a
 demo event's seed dates had also drifted into the past (Sep 24/25, "Editing as" resolves
 nobody once the venue clock moves past the event), so the production DB was reseeded with
 today-dated data before this measurement; the edit sequence alternates +5/-5 and nets zero,
-so the deployed demo content is otherwise unchanged. L2.3 (stream life in the wild) and
-L2.4 (one-hour cost run) are still open.
+so the deployed demo content is otherwise unchanged.
+
+**L2.3, partial (2026-10-20).** Watched one view's live chip for 340 s: `data-status`
+stayed `live` throughout, never visibly dropping. Server logs show the route was
+re-invoked (reconnected) at least twice in that window — one gap of 283 s, within noise
+of `LIVE_MAX_MS` 280 000; one shorter gap of 188 s not fully explained by this log sample
+(`vercel logs` only returns a short recent window, so the full reconnect history for the
+run isn't visible). No errors in the route itself — the one `error`-tagged line is a
+benign pg SSL-mode deprecation warning, not a failure. **Confirmed:** the deployed stream
+does rotate near its designed interval and the client reconnects with no visible UI
+disruption. **Not exercised this run:** the explicit 0-lost/0-duplicated check across an
+edit made during the gap — the chip-attribute polling this script used never caught a
+transient "not live" state to anchor that edit to, so a more direct instrument (a network
+listener on the page, not a DOM attribute poll) is needed to finish this cleanly. L2.4
+(one-hour cost run) is still open.
