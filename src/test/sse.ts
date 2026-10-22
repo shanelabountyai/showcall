@@ -40,8 +40,21 @@ export function listen(res: Response, ac: AbortController) {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Node's `Request` makes its own `signal`, which follows the one passed in
+ * only while the Request object is alive: undici links them through a
+ * WeakRef. A test drops `req` once the route has it, the route keeps only
+ * `req.signal`, and after a garbage collection `ac.abort()` no longer reaches
+ * the stream, which then polls until its test times out (about 1 run in 8).
+ * Holding each Request for as long as its controller lives keeps abort
+ * meaning abort.
+ */
+const held = new WeakMap<AbortController, Request>();
+
 /** A GET with an abort handle, the way the route handlers receive it. */
 export function request(url: string, headers: Record<string, string> = {}) {
   const ac = new AbortController();
-  return { ac, req: new Request(url, { headers, signal: ac.signal }) };
+  const req = new Request(url, { headers, signal: ac.signal });
+  held.set(ac, req);
+  return { ac, req };
 }
