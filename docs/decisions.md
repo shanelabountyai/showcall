@@ -1216,3 +1216,66 @@ job before typecheck.
 - **Not caught by a syntax rule and left for the owner:** `app/events/[eventId]/speakers/page.tsx`
   stores the contract-signed date input with `new Date(signed)` (a date-only string, so UTC
   midnight; it round-trips, but it is a calendar day stored on a `timestamp` column).
+
+## D-053 · 2026-10-26 · The budget-closed date is the venue's calendar day (owner decision, 2026-10-26)
+
+Resolves the first item D-052 left open. "The budget was closed on …" (a close blocker in
+`src/reconcile/reconcile.ts`) and "Closed … as snapshot N" (`app/events/[eventId]/reconcile/page.tsx`)
+printed `takenAt.toISOString().slice(0, 10)`: the UTC day of the close instant. Owner
+decision: it is the **venue's** calendar day. `blockers()` now derives
+`closedOn = localNow(takenAt, event.timezone).day` once (hard rule 3, through `src/time.ts`),
+`reconciliation()` returns it, and the page prints it. Both lint suppressions are gone.
+
+- **Test** (`src/reconcile/reconcile.test.ts`): a close at 20:00 CDT on Oct 20
+  (`2026-10-21T01:00:00Z`) reads Oct 20 for an `America/Chicago` event, and a close at 05:00
+  on Oct 21 in `Pacific/Kiritimati` (`2026-10-20T15:00:00Z`) reads Oct 21 — both on the far
+  side of UTC midnight from the venue, in opposite directions; the test asserts that premise
+  (UTC day ≠ venue day) too. Run under `TZ=America/Chicago`, `UTC` and `Pacific/Kiritimati`.
+- The stored instant is unchanged; only what it is read as.
+
+## D-054 · 2026-10-26 · The contract-signed date is stored as a calendar-day string (owner decision, 2026-10-26)
+
+Resolves the second item D-052 left open. The speakers form stored its `<input type="date">`
+with `new Date(signed)` on a `TIMESTAMP(3)` column (`Speaker.contractSignedAt`) and read it
+back as the UTC day. Owner decision: a calendar day is stored as the repo's `LocalDate`
+string — `'YYYY-MM-DD'` in a `CHAR(10)` column, **never `@db.Date`** and never a timestamp.
+
+- **Column:** `contractSignedAt TIMESTAMP(3)` → **`contractSignedOn CHAR(10)`**, renamed so
+  the name says which axis it is on (`…On` is a day everywhere else in the schema). A CHECK
+  (`Speaker_contractSignedOn_day`) holds the shape and a round trip through `date`, so
+  `'2026-8-15'` and `'2026-02-30'` are refused by the database as well as by the module.
+- **Migration** `20261026120000_contract_signed_on` (hand-written): add, convert, drop the
+  old column, add the CHECK.
+- **Conversion rule:** each existing timestamp becomes **the date part of the stored value,
+  as stored** — `to_char("contractSignedAt", 'YYYY-MM-DD')`. Why that is the day it was
+  entered as: the only writer stored `new Date('YYYY-MM-DD')` (UTC midnight of the typed
+  day; the seed wrote the same shape), Prisma writes a `TIMESTAMP(3)` as its UTC wall time,
+  and the page read it back as that UTC day. `to_char` on a `timestamp without time zone`
+  does no zone conversion, so the session `TimeZone` cannot move it.
+- **Readers/writers updated:** `src/bureau/bureau.ts` (`GuardCtx`, `ProfileInput`, the
+  `contracted` guard and the missing list; `setProfile` refuses a non-day with
+  `SpeakerRefused`), `src/chase/chase.ts`, the speakers page (the form posts the day string
+  straight through; no `new Date`), `prisma/seed.ts`, and two tests. `src/time.ts` gains
+  `localDate(s)`, the validator (pure string + UTC-midnight arithmetic).
+- **Tests** (`src/bureau/contract-signed.test.ts`, 9): round trip of five days (the year's
+  edges and both US DST days) checking both the Prisma read and the raw column; clear to
+  null; refusal in the module and past it by the CHECK; the conversion premise (Prisma
+  writes UTC midnight as `00:00:00` on the sibling `consentRecordedAt` column); and the real
+  migration file run against a scratch schema under session `TimeZone` Kiritimati, UTC and
+  Chicago, converting four timestamps and a null to the expected days. Run under
+  `TZ=Pacific/Kiritimati` and `TZ=UTC` (and Chicago). One e2e spec saves a new day through
+  the form and reads it back after reload.
+- **Not changed:** the schema's other calendar days are still `@db.Date` with
+  `toDbDate`/`fromDbDate` (20 columns). They were not in this decision; moving them would
+  be its own migration and its own owner call.
+
+## D-055 · 2026-10-26 · The narrower date ban stays (owner decision, 2026-10-26)
+
+Owner decision: keep D-052's narrower rule — `new Date(x)` with a non-literal argument
+stays allowed; only string literals with no `Z`/offset, `Date.parse`, bare `new Date()`,
+local-time accessors, `getTimezoneOffset` and `toISOString().slice(0, 10)` are banned.
+Why: showcall is a shipped project; the ~32 `new Date(x)` call sites (D-052's count) copy
+instants or build them from epoch-ms and none is known to be wrong; banning the form
+would force a rewrite of each for no found defect. The two real axis-crossings the lint
+pass surfaced are fixed instead (D-053, D-054). A future `new Date(dayString)` is the
+case the narrower rule cannot see — review catches it, as it caught the speakers form.
