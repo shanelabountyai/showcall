@@ -1184,3 +1184,35 @@ the whole test day. Nothing was close enough to a target to justify tuning.
 - **O-5:** Neon staying awake while a stream is open — accepted, unchanged.
 
 Backlog S-30 and S-31 ✅ (phase 2 gate closed).
+
+## D-052 · 2026-10-26 · ESLint added; date-axis bans enforce hard rule 3 (owner decision, 2026-10-26)
+
+Showcall had no linter. Owner decision: add ESLint modelled on the house repos. Added
+`eslint` ^9.39.5 and `eslint-config-next` ^16.3.6 (saas-foundation's specifiers; the lock
+resolves 16.4.3, alongside `next` 16.4.0) — the only dependency change. `eslint.config.mjs`
+is saas-foundation's shape (Next core-web-vitals + typescript) plus bookable's
+axis-crossing bans, adapted to CLAUDE.md hard rule 3. `npm run lint` runs in the CI `ci`
+job before typecheck.
+
+- **Banned everywhere except `src/time.ts` and `src/clock.ts`:** bare `new Date()` and
+  `Date.now()` (take now from the injected clock); `new Date('YYYY-MM-DD…')` string literals
+  with no `Z`/offset; `Date.parse`; local-time `get/set{Hours,Minutes,…,FullYear,Day}`;
+  `getTimezoneOffset`; `toISOString().slice(0, 10)`.
+- **Deliberately narrower than bookable:** `new Date(x)` with a non-literal argument stays
+  allowed (showcall copies instants and builds them from epoch-ms in ~30 places, all of
+  which would need a rewrite, not a lint fix), and `toISOString().slice(0, 16) + ' UTC'`
+  stays allowed (an honest UTC stamp of an instant). The UTC-midnight `getUTC*` accessors
+  are not banned; `src/time.ts` itself is built on `Date.UTC`.
+- **`_`-prefixed names** are ignored by `no-unused-vars` (the repo destructures to drop).
+- **Real-logic findings kept as-is behind a one-line suppression**, each naming why:
+  the budget-closed day in `src/reconcile/reconcile.ts` and `app/events/[eventId]/reconcile/page.tsx`
+  prints `takenAt`'s UTC day rather than the venue's (open for the owner: switch to
+  `localNow(takenAt, timeZone).day`); two `Date.now()` in `e2e/live.spec.ts` that measure real
+  wall latency; three React-compiler findings in the live stream and the row editor
+  (`react-hooks/refs` ×1, `react-hooks/set-state-in-effect` ×2) whose fix is a restructure
+  of D-039/D-048 code, not lint.
+- **`cues.ts` `dayMin` moved from `Date.parse(d)` to `toDbDate(d).getTime()`**; a test in
+  `src/time.test.ts` checks the two are equal on all 1827 days of 2024–2028.
+- **Not caught by a syntax rule and left for the owner:** `app/events/[eventId]/speakers/page.tsx`
+  stores the contract-signed date input with `new Date(signed)` (a date-only string, so UTC
+  midnight; it round-trips, but it is a calendar day stored on a `timestamp` column).

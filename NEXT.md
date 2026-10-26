@@ -4,6 +4,13 @@
 Pick a new project or item; port 4200 is the next free one (add its row to the global
 table in the same commit as its config).
 
+## ESLint added (2026-10-26, branch `add-eslint`)
+
+`npm run lint` exists and runs in CI before typecheck (D-052). Open for the owner: the
+budget-closed date prints `takenAt`'s UTC day (two suppressed lines name it), and the
+speakers form stores a date input with `new Date(signed)`. The DB half of `npm test` did not
+run in the cloud sandbox (no local Postgres credentials); CI is the gate.
+
 ## Showcall Live closure (2026-10-20/21)
 
 Built on branches `live-kickoff`/`live-phase-1`, merged via PR #1 and #2, deployed and
