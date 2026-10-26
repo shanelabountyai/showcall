@@ -1,4 +1,4 @@
-import { hhmm, shortDay, type LocalDate } from '../time';
+import { hhmm, shortDay, toDbDate, type LocalDate } from '../time';
 
 /**
  * The cue graph (P0-2). Pure: agenda sessions and cue specs in, every derived
@@ -31,7 +31,7 @@ export type Problem = { kind: ProblemKind; cueId: string; message: string };
 export type Moved = { id: string; from: Span | null; to: Span | null };
 
 const edgeMin = (t: Span, edge: Edge) => (edge === 'start' ? t.startMin : t.endMin);
-const dayMin = (d: LocalDate) => Date.parse(d) / 60_000;
+const dayMin = (d: LocalDate) => toDbDate(d).getTime() / 60_000;
 
 export function resolveCues(sessions: SessionTiming[], cues: CueSpec[]) {
   const timings = new Map<string, Timing>(sessions.map((s) => [s.id, { day: s.day, startMin: s.startMin, endMin: s.endMin }]));

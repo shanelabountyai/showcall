@@ -21,6 +21,15 @@ describe('minute-of-day', () => {
 });
 
 describe('LocalDate', () => {
+  it('toDbDate is Date.parse on a date-only string, so cues.ts dayMin moved off Date.parse unchanged (D-052)', () => {
+    let n = 0;
+    for (let d = '2024-01-01'; d <= '2028-12-31'; d = addDays(d, 1), n++) {
+      // eslint-disable-next-line no-restricted-syntax -- the oracle: the exact expression cues.ts used before D-052
+      expect(toDbDate(d).getTime(), d).toBe(Date.parse(d));
+    }
+    expect(n).toBe(1827); // five years, two leap days, every DST edge in between
+  });
+
   it('round-trips a Postgres date column (UTC midnight) whatever the process TZ', () => {
     expect(toDbDate('2026-10-13').toISOString()).toBe('2026-10-13T00:00:00.000Z');
     expect(fromDbDate(toDbDate('2028-02-29'))).toBe('2028-02-29');
