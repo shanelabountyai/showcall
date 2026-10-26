@@ -39,6 +39,7 @@ jobs:
       - run: npm ci
       - run: psql -c "create database showcall_test"
       - run: npx prisma migrate deploy
+      - run: npm run lint
       - run: npm run typecheck
       - run: npx vitest run
 
