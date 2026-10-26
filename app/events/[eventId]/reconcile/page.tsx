@@ -90,7 +90,9 @@ export default async function Reconcile({ params, searchParams }: { params: Prom
           </tbody>
         </table>
         {view.closed ? (
-          <p>Closed {view.closed.takenAt.toISOString().slice(0, 10)} as snapshot {view.closed.number}. Every line is frozen.</p>
+          <p>Closed {
+            // eslint-disable-next-line no-restricted-syntax -- UTC day of an instant, not the venue's; kept as-is pending owner decision (D-052)
+            view.closed.takenAt.toISOString().slice(0, 10)} as snapshot {view.closed.number}. Every line is frozen.</p>
         ) : view.issues.length ? (
           <>
             <p>Before the budget can close:</p>

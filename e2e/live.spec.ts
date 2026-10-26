@@ -266,9 +266,11 @@ test.describe.serial('Showcall Live (S-30)', () => {
         const offset = f.getByLabel('Offset (min)');
         await offset.fill(String(Number(await offset.inputValue()) + delta));
       });
+      // eslint-disable-next-line no-restricted-syntax -- measures real wall-clock latency across two browsers; an injected clock cannot
       const t0 = Date.now();
       await commit(form);
       await B.waitForFunction(([rowId, want]) => document.querySelector(`article[data-row-id="${rowId}"]`)?.getAttribute('data-start') === want, [id, String(start + delta)] as const, { polling: 20, timeout: 10_000 });
+      // eslint-disable-next-line no-restricted-syntax -- see t0 above
       ms.push(Date.now() - t0);
       await expect(row(A, 'Doors open').getByRole('form')).toHaveCount(0);
     }

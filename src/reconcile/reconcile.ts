@@ -99,6 +99,10 @@ async function blockers(db: Tx, eventId: string, today: LocalDate) {
   const endDate = fromDbDate(event.endDate);
   const attrition = blocks.map((b) => ({ hotel: b.hotel.name, rateCents: b.rateCents, ...finalAttrition(contractOf(b), today) }));
   const issues: string[] = [];
+  // takenAt is an instant; this prints its UTC day, not the venue's. Moving it to
+  // localNow(takenAt, timeZone).day would change the text near UTC midnight, so it is
+  // flagged for the owner rather than changed in the lint PR (D-052).
+  // eslint-disable-next-line no-restricted-syntax -- UTC day of an instant, kept as-is pending owner decision (D-052)
   if (closed) issues.push(`The budget was closed on ${closed.takenAt.toISOString().slice(0, 10)}`);
   if (today <= endDate) issues.push(`The show runs through ${shortDay(endDate)}; close the budget after it`);
   for (const l of lines) {

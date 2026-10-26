@@ -24,11 +24,13 @@ export function useLiveStream<T>(url: string, initial: Frame<T>, opts: { replace
   const [state, setState] = useState<HeldState<T>>(() => hold(initial, systemClock.now().getTime()));
   const [status, setStatus] = useState<LinkStatus>('live');
   const held = useRef(state.seq);
+  // eslint-disable-next-line react-hooks/refs -- the stream effect reads the latest seq on reopen without re-subscribing; moving this write into an effect changes reconnect timing (D-052)
   held.current = state.seq;
   const replace = !!opts.replaceOnEqual;
 
   // A server re-render (an action's redirect, or the Poll fallback) brings a newer first frame.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- merges a newer server-rendered first frame into live state; the merge needs the previous state, so it cannot be derived during render (D-052)
     setState((s) => applyFrame(s, initial, { at: 0, replaceOnEqual: replace, fromChannel: false }));
   }, [initial, replace]);
 
