@@ -156,7 +156,7 @@ const portalLinks: string[] = [];
 
 for (const [name, plan] of Object.entries(bureauPlan)) {
   const speakerId = sp[name]!;
-  if (plan.honorariumCents != null) await setProfile(speakerId, { honorariumCents: plan.honorariumCents, contractSignedAt: new Date('2026-08-15'), ...(plan.bio && { bio: plan.bio }) });
+  if (plan.honorariumCents != null) await setProfile(speakerId, { honorariumCents: plan.honorariumCents, contractSignedAt: new Date('2026-08-15T00:00:00Z'), ...(plan.bio && { bio: plan.bio }) });
   if (plan.rehearsal) {
     await saveSession(event.id, { title: `Rehearsal — ${name}`, day: d1, roomId: room[plan.rehearsal].id, startMin: at(7, 30), endMin: at(8), speakerIds: [speakerId], isRehearsal: true });
   }

@@ -117,7 +117,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
               <input name="avNeeds" defaultValue={s.avNeeds} placeholder="AV needs" aria-label="AV needs" /><br />
               <label>Honorarium $ <input name="honorarium" type="number" min="0" step="0.01" defaultValue={s.honorariumCents == null ? '' : s.honorariumCents / 100} aria-label="Honorarium" /></label>
               {s.honorariumCents != null && <span> ({usd(s.honorariumCents)})</span>}<br />
-              <label>Contract signed <input name="contractSignedAt" type="date" defaultValue={s.contractSignedAt?.toISOString().slice(0, 10) ?? ''} aria-label="Contract signed" /></label>
+              <label>Contract signed <input name="contractSignedAt" type="date" defaultValue={s.contractSignedAt ? fromDbDate(s.contractSignedAt) : ''} aria-label="Contract signed" /></label>
               <button type="submit">Save profile</button>
             </form>
 
