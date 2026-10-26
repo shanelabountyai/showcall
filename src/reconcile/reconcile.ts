@@ -99,11 +99,9 @@ async function blockers(db: Tx, eventId: string, today: LocalDate) {
   const endDate = fromDbDate(event.endDate);
   const attrition = blocks.map((b) => ({ hotel: b.hotel.name, rateCents: b.rateCents, ...finalAttrition(contractOf(b), today) }));
   const issues: string[] = [];
-  // takenAt is an instant; this prints its UTC day, not the venue's. Moving it to
-  // localNow(takenAt, timeZone).day would change the text near UTC midnight, so it is
-  // flagged for the owner rather than changed in the lint PR (D-052).
-  // eslint-disable-next-line no-restricted-syntax -- UTC day of an instant, kept as-is pending owner decision (D-052)
-  if (closed) issues.push(`The budget was closed on ${closed.takenAt.toISOString().slice(0, 10)}`);
+  // takenAt is an instant; the day it names is the venue's calendar day (D-053).
+  const closedOn = closed ? localNow(closed.takenAt, event.timezone).day : null;
+  if (closedOn) issues.push(`The budget was closed on ${closedOn}`);
   if (today <= endDate) issues.push(`The show runs through ${shortDay(endDate)}; close the budget after it`);
   for (const l of lines) {
     if (l.committedCents > 0 && l.actualCents === 0) {
@@ -116,7 +114,7 @@ async function blockers(db: Tx, eventId: string, today: LocalDate) {
   }
   // D-028: the client is billed only what they approved. Send them the budget from the budget page.
   for (const g of approval.unapproved) issues.push(`Not approved by the client: ${g.description}, ${g.isNew ? usd(g.cents) : `+${usd(g.cents)}`}`);
-  return { event, lines, attrition, closed, issues };
+  return { event, lines, attrition, closed, closedOn, issues };
 }
 
 /** Everything the reconciliation page shows, as of the clock. Reads only. */
@@ -131,7 +129,7 @@ export async function reconciliation(eventId: string, clock: Clock) {
     budgetToActuals(eventId),
   ]);
   const cues = cueSlip(sheet.rows, marks.map((m) => ({ ...m, room: m.room.name, day: fromDbDate(m.day) })));
-  return { event, today, cues, attrition: check.attrition, budget, closed: check.closed, issues: check.issues };
+  return { event, today, cues, attrition: check.attrition, budget, closed: check.closed, closedOn: check.closedOn, issues: check.issues };
 }
 
 /**
