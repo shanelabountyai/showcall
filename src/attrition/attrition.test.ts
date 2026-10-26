@@ -3,6 +3,7 @@ import { budgetToActuals } from '../budget/budget';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
 import { makeEvent, makeSpeaker, makeStaff, resetDb } from '../test/harness';
+import { toDbDate } from '../time';
 import { addThreshold, assess, AttritionRefused, attritionBoard, createBlock, decide, framing, reserve, splitRelease, type Contract } from './attrition';
 
 beforeEach(resetDb);
@@ -135,8 +136,8 @@ describe('blocks and reservations', () => {
 
   it('the database refuses a speaker room with no speaker, even past the module', async () => {
     const { block } = await setup();
-    const d = new Date('2026-10-12');
-    await expect(prisma.roomReservation.create({ data: { blockId: block.id, kind: 'speaker', guest: 'x', arriveOn: d, departOn: new Date('2026-10-13'), bookedOn: d } })).rejects.toThrow(/RoomReservation_check/);
+    const d = toDbDate('2026-10-12');
+    await expect(prisma.roomReservation.create({ data: { blockId: block.id, kind: 'speaker', guest: 'x', arriveOn: d, departOn: toDbDate('2026-10-13'), bookedOn: d } })).rejects.toThrow(/RoomReservation_check/);
   });
 });
 
@@ -190,7 +191,7 @@ describe('decisions', () => {
   it('the database refuses an accept with no budget line behind it', async () => {
     const { block, d60 } = await setup();
     await expect(prisma.attritionDecision.create({
-      data: { blockId: block.id, thresholdId: d60.id, choice: 'accept', roomNights: 1, exposureCents: 24_000, decidedOn: new Date('2026-08-04'), decidedAt: new Date() },
+      data: { blockId: block.id, thresholdId: d60.id, choice: 'accept', roomNights: 1, exposureCents: 24_000, decidedOn: toDbDate('2026-08-04'), decidedAt: new Date('2026-08-04T17:00:00Z') },
     })).rejects.toThrow(/AttritionDecision_check/);
   });
 });

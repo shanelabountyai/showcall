@@ -3,6 +3,7 @@ import { publishAgenda } from '../agenda/publish';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
 import { makeEvent, makeSession, resetDb } from '../test/harness';
+import { toDbDate } from '../time';
 import { addCue, CascadeBlocked, CascadeChanged, commitCascade, loadRunSheet, previewCascade } from './cascade';
 import type { CueSpec } from './cues';
 
@@ -143,7 +144,7 @@ describe('run-sheet cascade', () => {
 
   it('the database refuses a cue that is both fixed and anchored, or neither', async () => {
     const { event, room, doors } = await show();
-    await expect(prisma.cue.update({ where: { id: doors.id }, data: { day: new Date('2026-10-13'), startMin: 500 } })).rejects.toThrow();
+    await expect(prisma.cue.update({ where: { id: doors.id }, data: { day: toDbDate('2026-10-13'), startMin: 500 } })).rejects.toThrow();
     await expect(prisma.cue.create({ data: { eventId: event.id, roomId: room.id, label: 'x', durationMin: 0 } })).rejects.toThrow();
   });
 });

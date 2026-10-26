@@ -115,7 +115,7 @@ export async function chaseBoard(eventId: string, clock: Clock) {
   });
   const speakers = found.map((s) => {
     const ctx: GuardCtx = {
-      honorariumCents: s.honorariumCents, contractSignedAt: s.contractSignedAt, bio: s.bio, consentRecordedAt: s.consentRecordedAt,
+      honorariumCents: s.honorariumCents, contractSignedOn: s.contractSignedOn, bio: s.bio, consentRecordedAt: s.consentRecordedAt,
       hasRehearsal: s.sessions.some((x) => x.session.isRehearsal), hasSession: s.sessions.some((x) => !x.session.isRehearsal),
       deckLocked: deckLocked(s.deliverables),
     };

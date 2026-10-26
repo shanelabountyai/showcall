@@ -75,7 +75,7 @@ describe('the client portal', () => {
     await expect(prisma.budgetApproval.update({ where: { id: yes.id }, data: { approved: false } })).rejects.toThrow();
     await expect(prisma.budgetApproval.delete({ where: { id: yes.id } })).rejects.toThrow();
     const v2 = await takeSnapshot(event.id, 'client v2', clock, true);
-    await expect(prisma.budgetApproval.create({ data: { snapshotId: v2.id, approved: false, signedBy: 'Dana', decidedAt: new Date() } })).rejects.toThrow(/decline_says_why/);
+    await expect(prisma.budgetApproval.create({ data: { snapshotId: v2.id, approved: false, signedBy: 'Dana', decidedAt: clock.now() } })).rejects.toThrow(/decline_says_why/);
   });
 });
 

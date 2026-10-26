@@ -34,7 +34,7 @@ export default async function Reconcile({ params, searchParams }: { params: Prom
 
       <section aria-label="Planned vs actual">
         <h2>Planned vs. actual</h2>
-        <p>Actual times come from the stage managers' GO log. Slip is actual minus planned. <em>Added</em> is how much later a row ran than the row before it, so it shows where the delay came from.</p>
+        <p>Actual times come from the stage managers&apos; GO log. Slip is actual minus planned. <em>Added</em> is how much later a row ran than the row before it, so it shows where the delay came from.</p>
         {view.cues.filter((g) => g.called).length === 0 && <p>No GO has been called yet.</p>}
         {view.cues.filter((g) => g.called).map((g) => (
           <article key={`${g.day}-${g.room}`} aria-label={`${g.room} ${g.day}`}>
@@ -90,7 +90,7 @@ export default async function Reconcile({ params, searchParams }: { params: Prom
           </tbody>
         </table>
         {view.closed ? (
-          <p>Closed {view.closed.takenAt.toISOString().slice(0, 10)} as snapshot {view.closed.number}. Every line is frozen.</p>
+          <p>Closed {view.closedOn} as snapshot {view.closed.number}. Every line is frozen.</p>
         ) : view.issues.length ? (
           <>
             <p>Before the budget can close:</p>

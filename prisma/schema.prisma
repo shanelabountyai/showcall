@@ -127,8 +127,8 @@ model Speaker {
   avNeeds          String       @default("")
   /// Integer cents (hard rule 4).
   honorariumCents  Int?
-  /// The e-sign seam.
-  contractSignedAt DateTime?
+  /// The e-sign seam. A calendar day, 'YYYY-MM-DD' (D-054): a LocalDate string, never `date` or a timestamp.
+  contractSignedOn String?      @db.Char(10)
 
   /// Stamped when the three flags below were last recorded — "on file", not that they are all yes.
   consentRecordedAt     DateTime?

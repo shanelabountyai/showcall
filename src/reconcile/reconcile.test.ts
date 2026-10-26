@@ -100,6 +100,21 @@ describe('budget close', () => {
     await expect(addLine(other.id, { category: 'av', description: 'Fine', committedCents: 1 })).resolves.toBeTruthy();
   });
 
+  // D-053: the closed day is the venue's calendar day, not the UTC day of takenAt.
+  // Both instants sit on the far side of UTC midnight from the venue, in opposite directions.
+  it.each([
+    ['America/Chicago', '2026-10-21T01:00:00Z', '2026-10-20'], // 20:00 CDT on the 20th; UTC is already the 21st
+    ['Pacific/Kiritimati', '2026-10-20T15:00:00Z', '2026-10-21'], // 05:00 on the 21st at UTC+14; UTC is still the 20th
+  ])('the closed day is the venue\'s day (%s, closed %s)', async (timezone, at, venueDay) => {
+    const event = await makeEvent({ timezone });
+    const clock = fixedClock(at);
+    await closeBudget(event.id, 0, clock);
+    const utcDay = at.slice(0, 10);
+    expect(utcDay).not.toBe(venueDay); // the premise: the two days differ for this instant
+    expect((await reconciliation(event.id, clock)).closedOn).toBe(venueDay);
+    await expect(closeBudget(event.id, 0, clock)).rejects.toThrow(`was closed on ${venueDay}`);
+  });
+
   it('owed attrition blocks the close until it is accepted onto the budget', async () => {
     const event = await makeEvent();
     const hotel = await prisma.vendor.create({ data: { name: 'Lakeview Grand' } });

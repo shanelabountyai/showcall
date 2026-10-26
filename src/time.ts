@@ -18,6 +18,16 @@ const shortFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'sh
 /** 'Tue, Oct 13' — for people, never for storage. */
 export const shortDay = (d: LocalDate) => shortFmt.format(toDbDate(d));
 
+/**
+ * A 'YYYY-MM-DD' string that names a real calendar day, returned as a LocalDate
+ * ('2026-02-30' and '2026-8-15' are not days). Pure string and UTC-midnight
+ * arithmetic, so the process timezone cannot touch it.
+ */
+export const localDate = (s: string): LocalDate => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || fromDbDate(toDbDate(s)) !== s) throw new Error(`Not a date: ${s}`);
+  return s;
+};
+
 /** 545 → '9:05'. */
 export const hhmm = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
 

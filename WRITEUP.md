@@ -980,3 +980,21 @@ cleanly.
 **Verdict on O-4/O-5:** both measured well inside their targets (latency, Neon compute,
 Vercel cost all low). Recorded as a dated decision once Shane confirms whether to keep the
 defaults — see D-051.
+
+## Calendar days after the lint pass (D-052 to D-055, 2026-10-26)
+
+ESLint's date-axis bans (D-052) found two places where a calendar day was read off the
+wrong axis. **The budget-closed date** printed the UTC day of the close instant: a budget
+closed at 8 pm in Chicago showed tomorrow. It now reads the venue's day through
+`src/time.ts`, tested on both sides of UTC midnight (D-053). **The contract-signed date**
+was a typed day stored as a UTC-midnight timestamp. It round-tripped, but only because every
+reader agreed to read it as UTC. It is now a `'YYYY-MM-DD'` string with a CHECK, and the
+migration converts each stored row to the day it was entered as. The migration is tested by
+running the real file against a scratch schema under three session time zones (D-054). The
+narrower ban stays (D-055): the remaining `new Date(x)` sites copy instants and none is
+known to be wrong.
+
+**Verdict — the date-axis lint rules: validated.** They found both real defects, and they
+cost nothing on the code that was already right. The schema's 20 other calendar days still
+use `@db.Date` with `toDbDate`/`fromDbDate`. That works the same way contract-signed did, by
+every reader agreeing, and moving it is left for the owner.

@@ -4,6 +4,26 @@
 Pick a new project or item; port 4200 is the next free one (add its row to the global
 table in the same commit as its config).
 
+## ESLint added (2026-10-26, branch `add-eslint`)
+
+`npm run lint` exists and runs in CI before typecheck (D-052). The two date items it left
+open were decided by the owner on 2026-10-26 and are fixed on the same branch:
+
+- **D-053:** the budget-closed date is the venue's calendar day
+  (`localNow(takenAt, event.timezone).day`); both lint suppressions removed.
+- **D-054:** `Speaker.contractSignedAt TIMESTAMP(3)` → `contractSignedOn CHAR(10)`
+  ('YYYY-MM-DD', CHECK-constrained), migration `20261026120000_contract_signed_on` converts
+  each stored timestamp to its date part as stored (the UTC midnight the form wrote).
+- **D-055:** the narrower `new Date(x)` ban stays.
+
+Local gate (sandbox Postgres, migrations via `psql -f`): lint clean, typecheck clean, vitest
+46 files / 327 tests under `TZ=Pacific/Kiritimati` and `TZ=UTC` (316 before; +2 close-day,
++9 contract-signed), e2e 39/39 (`--list` total 39). `prisma migrate deploy` runs only in CI.
+Five lint suppressions remain (three React-compiler, two `Date.now()` in `e2e/live.spec.ts`).
+Still open, not decided: the other 20 calendar-day columns are `@db.Date` (D-054 notes it).
+`next build` in the sandbox stopped once with a Next.js "security vulnerability, upgrade"
+notice and passed on retry; no upgrade was run (no dependency changes without the owner).
+
 ## Showcall Live closure (2026-10-20/21)
 
 Built on branches `live-kickoff`/`live-phase-1`, merged via PR #1 and #2, deployed and

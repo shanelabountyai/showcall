@@ -60,6 +60,7 @@ function RowEditor({ cue, rows, action, as, labels }: { cue: CueRowState; rows: 
   const set = (k: keyof RowValues) => (e: { target: { value: string } }) => setV((x) => ({ ...x, [k]: e.target.value }));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacts to the server action's answer (the D-039 rev handshake); restructuring it is a logic change, not lint (D-052)
     if (answer.kind === 'preview') setRev(answer.rev);
     if (answer.kind === 'committed') setOpen(false);
   }, [answer]);

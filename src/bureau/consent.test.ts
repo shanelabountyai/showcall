@@ -6,7 +6,7 @@ const FLAGS = ['consentRecordSession', 'consentDistributeDeck', 'consentPublishV
 
 function speaker(flags: Partial<Record<(typeof FLAGS)[number], boolean>>, recorded: boolean): ConsentSpeaker {
   return {
-    name: 'Dana Reyes', consentRecordedAt: recorded ? new Date('2026-09-01') : null,
+    name: 'Dana Reyes', consentRecordedAt: recorded ? new Date('2026-09-01T00:00:00Z') : null,
     consentRecordSession: false, consentDistributeDeck: false, consentPublishVideo: false,
     ...flags,
   };

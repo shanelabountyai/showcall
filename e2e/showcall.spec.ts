@@ -133,6 +133,21 @@ test.describe.serial('Showcall e2e (seeded Northwind Summit)', () => {
     });
   });
 
+  test.describe('speaker bureau (D-054)', () => {
+    test('the contract-signed day is saved and shown as the day typed', async ({ page }) => {
+      await page.goto(`/events/${eventId}/speakers`);
+      const ravi = () => page.locator('section').filter({ has: page.getByRole('heading', { name: /^Ravi Menon / }) });
+      const signed = () => ravi().getByLabel('Contract signed');
+      await expect(signed()).toHaveValue('2026-08-15'); // the seed's day
+      await signed().fill('2026-08-20');
+      await ravi().getByRole('button', { name: 'Save profile' }).click();
+      await expect(async () => { await page.reload(); await expect(signed()).toHaveValue('2026-08-20', { timeout: 1_000 }); }).toPass(); // a fresh render, once the action has landed
+      await signed().fill('2026-08-15'); // put the shared event back
+      await ravi().getByRole('button', { name: 'Save profile' }).click();
+      await expect(async () => { await page.reload(); await expect(signed()).toHaveValue('2026-08-15', { timeout: 1_000 }); }).toPass(); // a fresh render, once the action has landed
+    });
+  });
+
   test.describe('content turn-in (S-8, S-9)', () => {
     test('a producer issues a link; the speaker uploads, sees what to fix, and fixes it', async ({ page }) => {
       await page.goto(`/events/${eventId}/content`);

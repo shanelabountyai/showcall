@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../clock';
 import { prisma } from '../db';
 import { makeEvent, resetDb } from '../test/harness';
+import { toDbDate } from '../time';
 import { addLine } from './budget';
 import { addVendor, complianceBoard, complianceOutbox, ComplianceRefused, recordDoc, sendComplianceNags } from './compliance';
 
@@ -70,7 +71,7 @@ describe('recording docs', () => {
 
   it('the database backs the rule, and a doc on file is append-only', async () => {
     const { vendor } = await setup();
-    await expect(prisma.complianceDoc.create({ data: { vendorId: vendor.id, kind: 'coi', receivedOn: new Date('2026-01-01') } })).rejects.toThrow(/ComplianceDoc_expiry_check/);
+    await expect(prisma.complianceDoc.create({ data: { vendorId: vendor.id, kind: 'coi', receivedOn: toDbDate('2026-01-01') } })).rejects.toThrow(/ComplianceDoc_expiry_check/);
     const doc = await recordDoc(vendor.id, 'w9', '2026-01-01', null);
     await expect(prisma.complianceDoc.delete({ where: { id: doc.id } })).rejects.toThrow(/append-only/);
   });

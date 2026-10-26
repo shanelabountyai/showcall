@@ -5,6 +5,7 @@ import { fixedClock } from '../clock';
 import { prisma } from '../db';
 import { addCue, commitCascade, previewCascade } from '../runsheet/cascade';
 import { makeEvent, makeSession, resetDb } from '../test/harness';
+import { fromDbDate } from '../time';
 import { callSheetStatus, issueCallSheets } from './callsheet';
 import { acceptCoi, confirmReceipt, issueCrewLink, pendingCoi, PortalRefused, resolveCrewPortal, setRoleVendor, submitCoi } from './portal';
 
@@ -133,7 +134,7 @@ describe('COI through the portal (D-026)', () => {
     await expect(acceptCoi(event.id, sub.id, '2026-09-01')).rejects.toThrow(ComplianceRefused); // the paper says it expired before it arrived
     const doc = await acceptCoi(event.id, sub.id, '2027-05-31'); // the producer corrects the typed date
     expect(doc).toMatchObject({ kind: 'coi', vendorId: vendor.id });
-    expect(doc.expiresOn!.toISOString().slice(0, 10)).toBe('2027-05-31');
+    expect(fromDbDate(doc.expiresOn!)).toBe('2027-05-31');
     expect(await papersOutstanding(vendor.id, event.id)).not.toContain('no certificate of insurance on file');
     expect(await pendingCoi(event.id)).toEqual([]);
     await expect(acceptCoi(event.id, sub.id, '2027-05-31')).rejects.toThrow('already accepted');

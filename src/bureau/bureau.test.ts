@@ -20,7 +20,7 @@ describe('advance', () => {
 
     await expect(advance(speaker.id, clock)).rejects.toThrow(/Dana Reyes cannot become contracted: needs an honorarium and a signed contract/);
 
-    await setProfile(speaker.id, { honorariumCents: 50000, contractSignedAt: new Date('2026-09-01') });
+    await setProfile(speaker.id, { honorariumCents: 50000, contractSignedOn: '2026-09-01' });
     await advance(speaker.id, clock);
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).state).toBe('contracted');
 
