@@ -51,11 +51,11 @@ export default async function Speakers({ params, searchParams }: { params: Promi
     'use server';
     const speakerId = String(form.get('speakerId'));
     const dollars = String(form.get('honorarium'));
-    const signed = String(form.get('contractSignedAt'));
+    const signedOn = String(form.get('contractSignedOn') ?? '');
     await refusable(here, () => setProfile(speakerId, {
       bio: String(form.get('bio')), avNeeds: String(form.get('avNeeds')),
       honorariumCents: dollars ? Math.round(Math.max(0, Number(dollars)) * 100) : null,
-      contractSignedAt: signed ? new Date(signed) : null,
+      contractSignedOn: signedOn || null, // <input type="date"> posts the day itself, 'YYYY-MM-DD' (D-054)
     }));
   }
 
@@ -86,7 +86,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
       {error && <p role="alert">{error}</p>}
       {event.speakers.map((s) => {
         const ctx: GuardCtx = {
-          honorariumCents: s.honorariumCents, contractSignedAt: s.contractSignedAt, bio: s.bio, consentRecordedAt: s.consentRecordedAt,
+          honorariumCents: s.honorariumCents, contractSignedOn: s.contractSignedOn, bio: s.bio, consentRecordedAt: s.consentRecordedAt,
           hasRehearsal: s.sessions.some((x) => x.session.isRehearsal), hasSession: s.sessions.some((x) => !x.session.isRehearsal),
           deckLocked: deckLocked(s.deliverables),
         };
@@ -117,7 +117,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
               <input name="avNeeds" defaultValue={s.avNeeds} placeholder="AV needs" aria-label="AV needs" /><br />
               <label>Honorarium $ <input name="honorarium" type="number" min="0" step="0.01" defaultValue={s.honorariumCents == null ? '' : s.honorariumCents / 100} aria-label="Honorarium" /></label>
               {s.honorariumCents != null && <span> ({usd(s.honorariumCents)})</span>}<br />
-              <label>Contract signed <input name="contractSignedAt" type="date" defaultValue={s.contractSignedAt ? fromDbDate(s.contractSignedAt) : ''} aria-label="Contract signed" /></label>
+              <label>Contract signed <input name="contractSignedOn" type="date" defaultValue={s.contractSignedOn ?? ''} aria-label="Contract signed" /></label>
               <button type="submit">Save profile</button>
             </form>
 

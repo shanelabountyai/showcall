@@ -1,6 +1,7 @@
 import type { Clock } from '../clock';
 import { prisma, type Tx } from '../db';
 import type { SpeakerState } from '../generated/prisma/enums';
+import { localDate, type LocalDate } from '../time';
 
 /**
  * The speaker lifecycle (P0-4): invited → confirmed → contracted →
@@ -17,7 +18,7 @@ export const LIFECYCLE = ['invited', 'confirmed', 'contracted', 'content_complet
 export class SpeakerRefused extends Error {}
 
 export type GuardCtx = {
-  honorariumCents: number | null; contractSignedAt: Date | null; bio: string;
+  honorariumCents: number | null; contractSignedOn: LocalDate | null; bio: string;
   consentRecordedAt: Date | null; hasRehearsal: boolean; hasSession: boolean;
   /** Every deck the speaker owes is approved and locked as a show file (D-016). */
   deckLocked: boolean;
@@ -36,7 +37,7 @@ export function contentMissing(c: Pick<GuardCtx, 'bio' | 'deckLocked'>): string[
 export function missingItems(c: GuardCtx & { headshotUrl: string | null }): string[] {
   return [
     ...(!c.headshotUrl ? ['a headshot'] : []),
-    ...(c.contractSignedAt == null ? ['a signed contract'] : []),
+    ...(c.contractSignedOn == null ? ['a signed contract'] : []),
     ...(c.honorariumCents == null ? ['an honorarium'] : []),
     ...contentMissing(c),
     ...(c.consentRecordedAt == null ? ['consent on file'] : []),
@@ -50,7 +51,7 @@ export const deckQuery = { where: { kind: 'deck' }, select: { locks: { take: 1, 
 
 /** What `to` requires, or null if `ctx` already satisfies it. */
 const GUARDS: Partial<Record<SpeakerState, (ctx: GuardCtx) => string | null>> = {
-  contracted: (c) => (c.honorariumCents == null || c.contractSignedAt == null) ? 'needs an honorarium and a signed contract' : null,
+  contracted: (c) => (c.honorariumCents == null || c.contractSignedOn == null) ? 'needs an honorarium and a signed contract' : null,
   content_complete: (c) => { const m = contentMissing(c); return m.length ? `needs ${m.join(' and ')}` : null; },
   rehearsed: (c) => (!c.hasRehearsal) ? 'needs a booked rehearsal slot' : null,
   showed: (c) => (!c.hasSession) ? 'is not on the agenda' : null,
@@ -73,7 +74,7 @@ async function loadCtx(tx: Tx, speakerId: string): Promise<GuardCtx> {
     tx.deliverable.findMany({ where: { speakerId, ...deckQuery.where }, select: deckQuery.select }),
   ]);
   return {
-    honorariumCents: speaker.honorariumCents, contractSignedAt: speaker.contractSignedAt, bio: speaker.bio,
+    honorariumCents: speaker.honorariumCents, contractSignedOn: speaker.contractSignedOn, bio: speaker.bio,
     consentRecordedAt: speaker.consentRecordedAt,
     hasRehearsal: sessions.some((s) => s.session.isRehearsal),
     hasSession: sessions.some((s) => !s.session.isRehearsal),
@@ -112,9 +113,13 @@ export async function revert(speakerId: string, to: SpeakerState, reason: string
   });
 }
 
-export type ProfileInput = { bio?: string; avNeeds?: string; honorariumCents?: number | null; contractSignedAt?: Date | null; headshotUrl?: string | null };
+/** `contractSignedOn` is the calendar day the contract was signed, 'YYYY-MM-DD' (D-054) — a day, not an instant. */
+export type ProfileInput = { bio?: string; avNeeds?: string; honorariumCents?: number | null; contractSignedOn?: LocalDate | null; headshotUrl?: string | null };
 
-export function setProfile(speakerId: string, input: ProfileInput) {
+export async function setProfile(speakerId: string, input: ProfileInput) {
+  if (input.contractSignedOn != null) {
+    try { localDate(input.contractSignedOn); } catch { throw new SpeakerRefused(`The contract-signed date is not a calendar day: ${input.contractSignedOn}`); }
+  }
   return prisma.speaker.update({ where: { id: speakerId }, data: input });
 }
 

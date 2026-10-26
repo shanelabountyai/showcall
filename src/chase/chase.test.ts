@@ -131,7 +131,7 @@ describe('bureau roll-up', () => {
     const bare = (await chaseBoard(event.id, clock)).speakers[0]!;
     expect(bare.missing).toEqual(['a headshot', 'a signed contract', 'an honorarium', 'a bio', 'an approved deck', 'consent on file']);
 
-    await setProfile(dana.id, { bio: 'Dana runs ops.', headshotUrl: '/h.png', honorariumCents: 500_00, contractSignedAt: new Date('2026-08-15T00:00:00Z') });
+    await setProfile(dana.id, { bio: 'Dana runs ops.', headshotUrl: '/h.png', honorariumCents: 500_00, contractSignedOn: '2026-08-15' });
     const filled = (await chaseBoard(event.id, clock)).speakers[0]!;
     expect(filled.missing).toEqual(['an approved deck', 'consent on file']);
 
