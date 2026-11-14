@@ -1136,3 +1136,14 @@ model LoadSlot {
   cue         Cue      @relation(fields: [cueId], references: [id])
   cueId       String   @unique
 }
+
+/// Fixed-window request counters for the public portals (K5, SEC-07): one row
+/// per key per window, bumped by a single atomic upsert (src/rate-limit.ts).
+/// Keys never hold a raw token — portal keys use its SHA-256.
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int
+
+  @@id([key, windowStart])
+}

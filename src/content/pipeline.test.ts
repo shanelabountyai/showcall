@@ -104,14 +104,14 @@ describe('submitVersion — the trust boundary', () => {
 
 describe('comments', () => {
   it('submitters comment only on their own versions; bodies must be non-empty', async () => {
-    const { a, b, deckA } = await setup();
+    const { event, a, b, deckA } = await setup();
     const tokenA = await issuePortalToken({ speakerId: a.id });
     const tokenB = await issuePortalToken({ speakerId: b.id });
     const v = await submitVersion(tokenA, deckA.id, upload(await pdf(1920, 1080)), clock);
-    await producerComment(v.id, 'Use the new logo on slide 2', true, clock);
+    await producerComment(event.id, v.id, 'Use the new logo on slide 2', true, clock);
     await submitterComment(tokenA, v.id, 'Will do', clock);
     await expect(submitterComment(tokenB, v.id, 'Hijack', clock)).rejects.toThrow('That version is not on this link');
-    await expect(producerComment(v.id, '   ', false, clock)).rejects.toThrow(ContentRefused);
+    await expect(producerComment(event.id, v.id, '   ', false, clock)).rejects.toThrow(ContentRefused);
     expect(await prisma.versionComment.findMany({ where: { versionId: v.id }, orderBy: { at: 'asc' } })).toMatchObject([
       { side: 'producer', requestsChanges: true }, { side: 'submitter', requestsChanges: false, body: 'Will do' },
     ]);
@@ -130,10 +130,10 @@ describe('addRule', () => {
 
 describe('append-only', () => {
   it('refuses UPDATE and DELETE on versions, runs and comments', async () => {
-    const { a, deckA } = await setup();
+    const { event, a, deckA } = await setup();
     const token = await issuePortalToken({ speakerId: a.id });
     const v = await submitVersion(token, deckA.id, upload(await pdf(1920, 1080)), clock);
-    const c = await producerComment(v.id, 'Looks good', false, clock);
+    const c = await producerComment(event.id, v.id, 'Looks good', false, clock);
     await expect(prisma.contentVersion.update({ where: { id: v.id }, data: { filename: 'x' } })).rejects.toThrow(/append-only/);
     await expect(prisma.contentVersion.delete({ where: { id: v.id } })).rejects.toThrow(/append-only/);
     await expect(prisma.validationRun.update({ where: { id: v.runs[0]!.id }, data: { outcome: 'passed' } })).rejects.toThrow(/append-only/);
@@ -146,5 +146,15 @@ describe('append-only', () => {
     const { event, a, sponsor } = await setup();
     await expect(prisma.deliverable.create({ data: { eventId: event.id, kind: 'logo', label: 'x', speakerId: a.id, sponsorId: sponsor.id } })).rejects.toThrow(/one_owner/);
     await expect(prisma.deliverable.create({ data: { eventId: event.id, kind: 'logo', label: 'x' } })).rejects.toThrow(/one_owner/);
+  });
+});
+
+describe('event scoping (SEC-02)', () => {
+  it('a producer comment on another event\'s version is refused as not found, and writes nothing', async () => {
+    const { a, deckA } = await setup();
+    const other = await makeEvent();
+    const v = await submitVersion(await issuePortalToken({ speakerId: a.id }), deckA.id, upload(await pdf(1920, 1080)), clock);
+    await expect(producerComment(other.id, v.id, 'cross-event', true, clock)).rejects.toThrow('No such version');
+    expect(await prisma.versionComment.count()).toBe(0);
   });
 });

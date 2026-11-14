@@ -1,7 +1,9 @@
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { ApprovalRefused, decideBudget, resolveClientPortal } from '@/src/budget/approval';
 import { systemClock } from '@/src/clock';
 import { usd } from '@/src/money';
+import { portalRead, portalWrite, RateLimited } from '@/src/rate-limit';
 import { refusable } from '../../../events/[eventId]/refusable';
 
 export const dynamic = 'force-dynamic';
@@ -17,15 +19,19 @@ const stamp = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UT
 export default async function ClientPortal({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await params;
   const { error } = await searchParams;
+  if (!(await portalRead(await headers(), systemClock))) notFound();
   const p = await resolveClientPortal(token, systemClock);
   if (!p) notFound();
   const here = `/portal/client/${token}`;
 
   async function doDecide(form: FormData) {
     'use server';
-    await refusable(here, () => decideBudget(token, String(form.get('snapshotId')), {
-      approved: form.get('answer') === 'approve', signedBy: String(form.get('signedBy') ?? ''), note: String(form.get('note') ?? ''),
-    }, systemClock), ApprovalRefused);
+    await refusable(here, async () => {
+      await portalWrite(token, systemClock);
+      return decideBudget(token, String(form.get('snapshotId')), {
+        approved: form.get('answer') === 'approve', signedBy: String(form.get('signedBy') ?? ''), note: String(form.get('note') ?? ''),
+      }, systemClock);
+    }, ApprovalRefused, RateLimited);
   }
 
   const s = p.sent;

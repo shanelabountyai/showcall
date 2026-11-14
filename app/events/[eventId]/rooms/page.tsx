@@ -35,7 +35,7 @@ export default async function Rooms({ params, searchParams }: { params: Promise<
 
   async function doDecide(form: FormData) {
     'use server';
-    await refusable(here, () => decide(String(form.get('thresholdId')), String(form.get('choice')) as AttritionChoice, Number(form.get('expected')), systemClock), AttritionRefused, BudgetRefused);
+    await refusable(here, () => decide(eventId, String(form.get('thresholdId')), String(form.get('choice')) as AttritionChoice, Number(form.get('expected')), systemClock), AttritionRefused, BudgetRefused);
   }
 
   async function doBlock(form: FormData) {
@@ -55,12 +55,12 @@ export default async function Rooms({ params, searchParams }: { params: Promise<
 
   async function doThreshold(form: FormData) {
     'use server';
-    await refusable(here, () => addThreshold(String(form.get('blockId')), String(form.get('dueOn')), Number(form.get('percent'))), AttritionRefused);
+    await refusable(here, () => addThreshold(eventId, String(form.get('blockId')), String(form.get('dueOn')), Number(form.get('percent'))), AttritionRefused);
   }
 
   async function doReserve(form: FormData) {
     'use server';
-    await refusable(here, () => reserve(String(form.get('blockId')), {
+    await refusable(here, () => reserve(eventId, String(form.get('blockId')), {
       kind: String(form.get('kind')) as GuestKind, guest: String(form.get('guest') ?? ''),
       speakerId: String(form.get('speakerId') ?? '') || null, staffId: String(form.get('staffId') ?? '') || null,
       rooms: Number(form.get('rooms')), arriveOn: String(form.get('arriveOn')), departOn: String(form.get('departOn')),

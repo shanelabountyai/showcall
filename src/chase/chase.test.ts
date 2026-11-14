@@ -65,7 +65,7 @@ describe('state and ranking', () => {
     expect((await rowFor(event.id, '2026-09-25T15:00:00Z')).state).toBe('overdue');
 
     const v = await prisma.contentVersion.findFirstOrThrow({ where: { deliverable: { speakerId: dana.id } } });
-    await approve(v.id, clock);
+    await approve(event.id, v.id, clock);
     const locked = await rowFor(event.id, '2026-09-25T15:00:00Z');
     expect([locked.state, locked.lockedVersion, locked.owed]).toEqual(['locked', 1, null]);
   });
@@ -120,7 +120,7 @@ describe('reminder cadence', () => {
   it('stops chasing a deliverable once it is locked', async () => {
     const { event, dana } = await setup();
     const v = await prisma.contentVersion.findFirstOrThrow({ where: { deliverable: { speakerId: dana.id } } });
-    await approve(v.id, clock);
+    await approve(event.id, v.id, clock);
     await expect(sendDueReminders(event.id, fixedClock('2026-09-20T15:00:00Z'))).rejects.toThrow(ChaseRefused);
   });
 });
@@ -131,7 +131,7 @@ describe('bureau roll-up', () => {
     const bare = (await chaseBoard(event.id, clock)).speakers[0]!;
     expect(bare.missing).toEqual(['a headshot', 'a signed contract', 'an honorarium', 'a bio', 'an approved deck', 'consent on file']);
 
-    await setProfile(dana.id, { bio: 'Dana runs ops.', headshotUrl: '/h.png', honorariumCents: 500_00, contractSignedOn: '2026-08-15' });
+    await setProfile(event.id, dana.id, { bio: 'Dana runs ops.', headshotUrl: '/h.png', honorariumCents: 500_00, contractSignedOn: '2026-08-15' });
     const filled = (await chaseBoard(event.id, clock)).speakers[0]!;
     expect(filled.missing).toEqual(['an approved deck', 'consent on file']);
 

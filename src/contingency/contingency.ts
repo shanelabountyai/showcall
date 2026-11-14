@@ -158,8 +158,9 @@ export async function escalateAll(clock: Clock) {
   return sent;
 }
 
-async function undecidedBranch(planId: string, branchId: string) {
-  const branch = await prisma.contingencyBranch.findFirst({ where: { id: branchId, planId }, include: { plan: { include: { decision: true } } } });
+async function undecidedBranch(eventId: string, planId: string, branchId: string) {
+  // Scoped to the event in the path (SEC-02): another event's plan reads as not found.
+  const branch = await prisma.contingencyBranch.findFirst({ where: { id: branchId, planId, plan: { eventId } }, include: { plan: { include: { decision: true } } } });
   if (!branch) throw new ContingencyRefused('That branch is not on this plan');
   if (branch.plan.decision) throw new ContingencyRefused(`"${branch.plan.title}" has already been called`);
   return { ...branch, change: { edits: branch.cueEdits as CueEdit[] } };
@@ -170,8 +171,8 @@ async function undecidedBranch(planId: string, branchId: string) {
  * now, and the call sheets whose cues it touches. Writes nothing. A variant
  * that no longer applies cleanly comes back with its problems.
  */
-export async function previewBranch(planId: string, branchId: string) {
-  const branch = await undecidedBranch(planId, branchId);
+export async function previewBranch(eventId: string, planId: string, branchId: string) {
+  const branch = await undecidedBranch(eventId, planId, branchId);
   const result = await previewCascade(branch.plan.eventId, branch.change);
   const roles = await prisma.callRole.findMany({
     where: { eventId: branch.plan.eventId, cues: { some: { cueId: { in: result.moved.map((m) => m.id) } } } },
@@ -187,9 +188,9 @@ export async function previewBranch(planId: string, branchId: string) {
  * branches not taken stay on the plan as the record of what was not done.
  * Then every call sheet the move changed is re-issued, and only those.
  */
-export async function executeBranch(planId: string, branchId: string, expected: Moved[], clock: Clock) {
-  const branch = await undecidedBranch(planId, branchId);
-  const { eventId, title } = branch.plan;
+export async function executeBranch(eventId: string, planId: string, branchId: string, expected: Moved[], clock: Clock) {
+  const branch = await undecidedBranch(eventId, planId, branchId);
+  const { title } = branch.plan;
   // One instant for the call and the sheets it re-issues, so the decision log can name them.
   const at = fixedClock(clock.now());
   const decision = await commitCascade(eventId, branch.change, expected, async (tx, { moved }) => {

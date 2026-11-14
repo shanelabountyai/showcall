@@ -82,7 +82,7 @@ describe('budget close', () => {
     const event = await makeEvent();
     const line = await addLine(event.id, { category: 'av', description: 'LED wall', committedCents: 1_800_000 });
     await addLine(event.id, { category: 'other', description: 'Cancelled shuttle', committedCents: 0 });
-    await updateLine(line.id, { actualCents: 1_950_000 });
+    await updateLine(event.id, line.id, { actualCents: 1_950_000 });
     const v1 = await takeSnapshot(event.id, 'client v1', after, true);
     await decideBudget(await issueClientLink(event.id), v1.id, { approved: true, signedBy: 'Dana' }, fixedClock('2026-10-15T15:00:00Z'));
     await expect(closeBudget(event.id, 1_800_000, after)).rejects.toThrow(/actuals now total \$19,500\.00/);
@@ -90,7 +90,7 @@ describe('budget close', () => {
     const close = await closeBudget(event.id, 1_950_000, after);
     expect(close).toMatchObject({ number: 2, label: 'Close', final: true, committedCents: 1_800_000, actualCents: 1_950_000 });
     await expect(addLine(event.id, { category: 'av', description: 'Late add', committedCents: 1 })).rejects.toThrow(BudgetRefused);
-    await expect(updateLine(line.id, { actualCents: 1 })).rejects.toThrow(BudgetRefused);
+    await expect(updateLine(event.id, line.id, { actualCents: 1 })).rejects.toThrow(BudgetRefused);
     // The database holds the freeze even past the module.
     await expect(prisma.budgetLine.update({ where: { id: line.id }, data: { actualCents: 1 } })).rejects.toThrow(/is closed/);
     await expect(prisma.budgetLine.delete({ where: { id: line.id } })).rejects.toThrow(/is closed/);
@@ -119,16 +119,16 @@ describe('budget close', () => {
     const event = await makeEvent();
     const hotel = await prisma.vendor.create({ data: { name: 'Lakeview Grand' } });
     const block = await createBlock(event.id, { hotelId: hotel.id, rateCents: 24_000, contractedOn: '2026-06-15', cutoffOn: '2026-09-21', nights: contract(0).nights });
-    await addThreshold(block.id, '2026-08-14', 50);
-    const d30 = await addThreshold(block.id, '2026-09-13', 80);
-    await reserve(block.id, { kind: 'attendee', guest: 'Group A', rooms: 25, arriveOn: '2026-10-12', departOn: '2026-10-14' }, fixedClock('2026-07-01T15:00:00Z'));
+    await addThreshold(event.id, block.id, '2026-08-14', 50);
+    const d30 = await addThreshold(event.id, block.id, '2026-09-13', 80);
+    await reserve(event.id, block.id, { kind: 'attendee', guest: 'Group A', rooms: 25, arriveOn: '2026-10-12', departOn: '2026-10-14' }, fixedClock('2026-07-01T15:00:00Z'));
 
     await expect(closeBudget(event.id, 0, after)).rejects.toThrow(/Lakeview Grand: \$26,400\.00 of attrition is owed/);
     const view = await reconciliation(event.id, after);
     expect(view.attrition[0]).toMatchObject({ hotel: 'Lakeview Grand', shortfall: 110, gapCents: 2_640_000 });
 
-    const accepted = await decide(d30.id, 'accept', 2_640_000, after);
-    await updateLine(accepted.budgetLineId!, { actualCents: 2_640_000 });
+    const accepted = await decide(event.id, d30.id, 'accept', 2_640_000, after);
+    await updateLine(event.id, accepted.budgetLineId!, { actualCents: 2_640_000 });
     await expect(closeBudget(event.id, 2_640_000, after)).rejects.toThrow(/Not approved by the client: .*\$26,400\.00/);
     const v1 = await takeSnapshot(event.id, 'client v1', after, true);
     await decideBudget(await issueClientLink(event.id), v1.id, { approved: true, signedBy: 'Dana' }, fixedClock('2026-10-15T15:00:00Z'));

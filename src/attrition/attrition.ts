@@ -191,8 +191,10 @@ export async function createBlock(eventId: string, input: BlockInput) {
   });
 }
 
-export async function addThreshold(blockId: string, dueOn: LocalDate, percent: number) {
-  const block = await prisma.roomBlock.findUniqueOrThrow({ where: { id: blockId }, include: { nights: true } });
+export async function addThreshold(eventId: string, blockId: string, dueOn: LocalDate, percent: number) {
+  // Scoped to the event in the path (SEC-02): another event's block reads as not found.
+  const block = await prisma.roomBlock.findFirst({ where: { id: blockId, eventId }, include: { nights: true } });
+  if (!block) throw new AttritionRefused('No such block');
   isDay(dueOn, 'The threshold date');
   if (!Number.isSafeInteger(percent) || percent < 1 || percent > 100) throw new AttritionRefused('A threshold is a whole percent from 1 to 100');
   if (dueOn < fromDbDate(block.contractedOn)) throw new AttritionRefused('A threshold cannot fall before the contract was signed');
@@ -213,7 +215,7 @@ export type ReservationInput = {
  * Book rooms into the block, dated today. Speaker, staff and VIP rooms come
  * out of the same inventory as attendees', and count toward pickup the same.
  */
-export async function reserve(blockId: string, input: ReservationInput, clock: Clock) {
+export async function reserve(eventId: string, blockId: string, input: ReservationInput, clock: Clock) {
   const rooms = whole(input.rooms ?? 1, 'Rooms');
   const arriveOn = isDay(input.arriveOn, 'Arrival');
   const departOn = isDay(input.departOn, 'Departure');
@@ -221,7 +223,7 @@ export async function reserve(blockId: string, input: ReservationInput, clock: C
   return prisma.$transaction(async (tx) => {
     await lock(tx, blockId);
     const b = await loadBlock(tx, blockId);
-    if (!b) throw new AttritionRefused('No such block');
+    if (!b || b.eventId !== eventId) throw new AttritionRefused('No such block');
     const today = await todayFor(tx, b.eventId, clock);
     const v = view(b, today);
     if (v.pastCutoff) throw new AttritionRefused(`The cutoff was ${shortDay(v.contract.cutoffOn)}: unsold rooms went back to ${b.hotel.name}, and nothing more books into the block`);
@@ -257,8 +259,9 @@ export async function reserve(blockId: string, input: ReservationInput, clock: C
  * accept — and the decision is refused if the numbers have moved since, so
  * nobody signs off on an amount they did not see.
  */
-export async function decide(thresholdId: string, choice: AttritionChoice, expected: number, clock: Clock) {
-  const t = await prisma.attritionThreshold.findUnique({ where: { id: thresholdId } });
+export async function decide(eventId: string, thresholdId: string, choice: AttritionChoice, expected: number, clock: Clock) {
+  // Scoped to the event in the path (SEC-02): another event's threshold reads as not found.
+  const t = await prisma.attritionThreshold.findFirst({ where: { id: thresholdId, block: { eventId } } });
   if (!t) throw new AttritionRefused('No such threshold');
   return prisma.$transaction(async (tx) => {
     await lock(tx, t.blockId);

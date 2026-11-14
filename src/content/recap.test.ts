@@ -15,7 +15,7 @@ const attendees = { audience: 'attendees' } as const;
 const mp4 = (name = 'keynote.mp4') => ({ filename: name, mimeType: 'video/mp4', bytes: new Uint8Array([7, 7]) });
 const locked = async (speakerId: string, kind: 'deck' | 'video' = 'deck') => {
   const v = await makeDeck(speakerId, 'passed', undefined, kind);
-  await approve(v.id, clock);
+  await approve((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).eventId, v.id, clock);
   return v;
 };
 const yes = { recordSession: true, distributeDeck: true, publishVideo: true };
@@ -36,7 +36,7 @@ describe('attendees package — decks, videos and recordings, the no-path sweep 
     const speakerIds: string[] = [];
     for (const [i, consent] of combos.entries()) {
       const s = await makeSpeaker(event.id, { name: `Speaker ${String.fromCharCode(65 + i)}` });
-      if (consent) await setConsent(s.id, consent, clock);
+      if (consent) await setConsent(event.id, s.id, consent, clock);
       speakerIds.push(s.id);
       const session = await makeSession(event.id, room.id, D1, 480 + i * 60, 510 + i * 60, [s.id]);
       files.push({ id: (await locked(s.id)).id, kind: 'deck', owners: [s.id] }, { id: (await locked(s.id, 'video')).id, kind: 'video', owners: [s.id] });
@@ -85,7 +85,7 @@ describe('recap links', () => {
     const event = await makeEvent();
     const room = await prisma.room.create({ data: { eventId: event.id, name: 'Ballroom A' } });
     const dana = await makeSpeaker(event.id, { name: 'Dana Reyes' });
-    await setConsent(dana.id, yes, clock);
+    await setConsent(event.id, dana.id, yes, clock);
     const deck = await locked(dana.id);
     await makeSession(event.id, room.id, D1, 540, 600, [dana.id]);
     await publishAgenda(event.id, clock);
@@ -100,7 +100,7 @@ describe('recap links', () => {
     expect((await recapDownload(token, deck.id, clock))!.filename).toBe('deck-v1.pdf');
     expect(await prisma.recapDownload.count({ where: { attendeeId: jo.id, fileId: deck.id } })).toBe(1);
 
-    await setConsent(dana.id, { ...yes, distributeDeck: false }, clock);
+    await setConsent(event.id, dana.id, { ...yes, distributeDeck: false }, clock);
     expect(await recapFiles(event.id)).toEqual([]);
     expect((await resolveRecap(token, clock))!.files).toEqual([]);
     expect(await recapDownload(token, deck.id, clock)).toBeNull();
