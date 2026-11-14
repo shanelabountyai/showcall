@@ -104,8 +104,11 @@ async function addComment(versionId: string, side: 'producer' | 'submitter', bod
 }
 
 /** A producer's note on a version; `requestsChanges` marks it as asking for a new upload. */
-export const producerComment = (versionId: string, body: string, requestsChanges: boolean, clock: Clock) =>
-  addComment(versionId, 'producer', body, requestsChanges, clock);
+export async function producerComment(eventId: string, versionId: string, body: string, requestsChanges: boolean, clock: Clock) {
+  // Scoped to the event in the path (SEC-02): another event's version reads as not found.
+  if (!(await prisma.contentVersion.findFirst({ where: { id: versionId, deliverable: { eventId } }, select: { id: true } }))) throw new ContentRefused('No such version');
+  return addComment(versionId, 'producer', body, requestsChanges, clock);
+}
 
 /** The portal's reply: always the submitter side, and only on the token owner's own versions. */
 export async function submitterComment(token: string, versionId: string, body: string, clock: Clock) {

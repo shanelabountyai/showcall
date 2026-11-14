@@ -14,8 +14,9 @@ import { evaluate, type RuleResult } from './rules';
  */
 
 /** Serialise every lock write on the deliverable row, then read what it points at. */
-async function lockDeliverable(tx: Tx, versionId: string) {
-  const v = await tx.contentVersion.findUnique({ where: { id: versionId }, select: { number: true, deliverableId: true, facts: true } });
+async function lockDeliverable(tx: Tx, eventId: string, versionId: string) {
+  // Scoped to the event in the path (SEC-02): another event's version reads as not found.
+  const v = await tx.contentVersion.findFirst({ where: { id: versionId, deliverable: { eventId } }, select: { number: true, deliverableId: true, facts: true } });
   if (!v) throw new ContentRefused('No such version');
   const [d] = await tx.$queryRaw<{ eventId: string; kind: DeliverableKind; label: string }[]>`
     SELECT "eventId", kind, label FROM "Deliverable" WHERE id = ${v.deliverableId} FOR UPDATE`;
@@ -26,9 +27,9 @@ async function lockDeliverable(tx: Tx, versionId: string) {
 const fixes = (results: unknown) => (results as RuleResult[]).filter((r) => r.status === 'fail').map((r) => r.fix).join('; ');
 
 /** Approve the latest version as the show file. Refused if already locked, superseded, or its validation failed. */
-export async function approve(versionId: string, clock: Clock) {
+export async function approve(eventId: string, versionId: string, clock: Clock) {
   return prisma.$transaction(async (tx) => {
-    const { v, d, current } = await lockDeliverable(tx, versionId);
+    const { v, d, current } = await lockDeliverable(tx, eventId, versionId);
     if (current) throw new ContentRefused(`${d.label} is already locked to v${current.version.number} — another version needs an override with a reason`);
     const latest = await tx.contentVersion.aggregate({ where: { deliverableId: v.deliverableId }, _max: { number: true } });
     if (v.number !== latest._max.number) throw new ContentRefused(`v${v.number} is superseded by v${latest._max.number} — approve the latest version`);
@@ -43,10 +44,10 @@ export async function approve(versionId: string, clock: Clock) {
  * Re-validates against the current rules as a new run, which is kept whether
  * or not the override lands; a failed run refuses it (Shane's pick).
  */
-export async function override(versionId: string, reason: string, clock: Clock) {
+export async function override(eventId: string, versionId: string, reason: string, clock: Clock) {
   if (!reason.trim()) throw new ContentRefused('An override needs a reason');
   const result = await prisma.$transaction(async (tx) => {
-    const { v, d, current } = await lockDeliverable(tx, versionId);
+    const { v, d, current } = await lockDeliverable(tx, eventId, versionId);
     if (!current) throw new ContentRefused(`${d.label} is not locked yet — approve it instead`);
     if (current.versionId === versionId) throw new ContentRefused(`v${v.number} is already the show file`);
     const rules = await tx.validationRule.findMany({ where: { eventId: d.eventId, kind: d.kind }, orderBy: { id: 'asc' } });

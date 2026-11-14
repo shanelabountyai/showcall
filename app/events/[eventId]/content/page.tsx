@@ -73,17 +73,17 @@ export default async function Content({ params, searchParams }: { params: Promis
 
   async function doComment(form: FormData) {
     'use server';
-    await refusable(here, () => producerComment(String(form.get('versionId')), String(form.get('body')), form.get('requestsChanges') === 'on', systemClock), ContentRefused);
+    await refusable(here, () => producerComment(eventId, String(form.get('versionId')), String(form.get('body')), form.get('requestsChanges') === 'on', systemClock), ContentRefused);
   }
 
   async function doApprove(form: FormData) {
     'use server';
-    await refusable(here, () => approve(String(form.get('versionId')), systemClock), ContentRefused);
+    await refusable(here, () => approve(eventId, String(form.get('versionId')), systemClock), ContentRefused);
   }
 
   async function doOverride(form: FormData) {
     'use server';
-    await refusable(here, () => override(String(form.get('versionId')), String(form.get('reason')), systemClock), ContentRefused);
+    await refusable(here, () => override(eventId, String(form.get('versionId')), String(form.get('reason')), systemClock), ContentRefused);
   }
 
   async function doRule(form: FormData) {

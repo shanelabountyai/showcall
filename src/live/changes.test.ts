@@ -94,7 +94,7 @@ describe('show change log and sequence', () => {
     const speaker = await makeSpeaker(event.id);
     const v1 = await makeDeck(speaker.id, 'passed');
     const seq = await seqOf(event.id);
-    await approve(v1.id, clock);
+    await approve(event.id, v1.id, clock);
     expect(await seqOf(event.id)).toBe(seq + 1);
     expect((await logOf(event.id)).at(-1)?.kinds).toEqual(['lock']);
     await makeDeck(speaker.id, 'passed'); // v2, after lock: kept, never the show file

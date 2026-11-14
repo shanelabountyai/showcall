@@ -37,14 +37,14 @@ export default async function Speakers({ params, searchParams }: { params: Promi
 
   async function doAdvance(form: FormData) {
     'use server';
-    await refusable(here, () => advance(String(form.get('speakerId')), systemClock), SpeakerRefused);
+    await refusable(here, () => advance(eventId, String(form.get('speakerId')), systemClock), SpeakerRefused);
   }
 
   async function doRevert(form: FormData) {
     'use server';
     const speakerId = String(form.get('speakerId'));
     const to = String(form.get('to')) as (typeof LIFECYCLE)[number];
-    await refusable(here, () => revert(speakerId, to, String(form.get('reason')), systemClock), SpeakerRefused);
+    await refusable(here, () => revert(eventId, speakerId, to, String(form.get('reason')), systemClock), SpeakerRefused);
   }
 
   async function doProfile(form: FormData) {
@@ -52,7 +52,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
     const speakerId = String(form.get('speakerId'));
     const dollars = String(form.get('honorarium'));
     const signedOn = String(form.get('contractSignedOn') ?? '');
-    await refusable(here, () => setProfile(speakerId, {
+    await refusable(here, () => setProfile(eventId, speakerId, {
       bio: String(form.get('bio')), avNeeds: String(form.get('avNeeds')),
       honorariumCents: dollars ? Math.round(Math.max(0, Number(dollars)) * 100) : null,
       contractSignedOn: signedOn || null, // <input type="date"> posts the day itself, 'YYYY-MM-DD' (D-054)
@@ -62,7 +62,7 @@ export default async function Speakers({ params, searchParams }: { params: Promi
   async function doConsent(form: FormData) {
     'use server';
     const speakerId = String(form.get('speakerId'));
-    await refusable(here, () => setConsent(speakerId, {
+    await refusable(here, () => setConsent(eventId, speakerId, {
       recordSession: form.get('recordSession') === 'on',
       distributeDeck: form.get('distributeDeck') === 'on',
       publishVideo: form.get('publishVideo') === 'on',
@@ -72,12 +72,16 @@ export default async function Speakers({ params, searchParams }: { params: Promi
   async function doRehearsal(form: FormData) {
     'use server';
     const speakerId = String(form.get('speakerId'));
-    const speaker = await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } });
-    await refusable(here, () => saveSession(eventId, {
-      title: `Rehearsal — ${speaker.name}`, day: String(form.get('day')), roomId: String(form.get('roomId')),
-      startMin: fromHhmm(String(form.get('start'))), endMin: fromHhmm(String(form.get('end'))),
-      speakerIds: [speakerId], isRehearsal: true,
-    }), GridEditRefused);
+    await refusable(here, async () => {
+      // Scoped to the event in the path (SEC-02): another event's speaker reads as not found.
+      const speaker = await prisma.speaker.findFirst({ where: { id: speakerId, eventId } });
+      if (!speaker) throw new GridEditRefused('A speaker is not in this event');
+      return saveSession(eventId, {
+        title: `Rehearsal — ${speaker.name}`, day: String(form.get('day')), roomId: String(form.get('roomId')),
+        startMin: fromHhmm(String(form.get('start'))), endMin: fromHhmm(String(form.get('end'))),
+        speakerIds: [speakerId], isRehearsal: true,
+      });
+    }, GridEditRefused);
   }
 
   return (

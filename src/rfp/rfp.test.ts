@@ -60,7 +60,7 @@ async function fixture() {
   for (const [label, basis] of [['Lunch', 'per_head'], ['Service staff', 'each'], ['Linens', 'flat']] as const) await addSchemaLine('catering', label, basis);
   const rfp = await createRfp(event.id, 'catering', 'Day 1 catering', clock);
   const items = await prisma.rfpItem.findMany({ where: { rfpId: rfp.id }, orderBy: { position: 'asc' } });
-  await setQuantity(items[1]!.id, 12);
+  await setQuantity(event.id, items[1]!.id, 12);
   const good = await addVendor('Good Catering');
   await recordDoc(good.id, 'coi', '2026-01-01', '2027-01-01');
   await recordDoc(good.id, 'w9', '2026-01-01', null);
@@ -72,27 +72,27 @@ async function fixture() {
 
 describe('quotes and the award', () => {
   it('refuses a quote that leaves a line unanswered, or an extra with no price', async () => {
-    const { rfp, items, good } = await fixture();
-    await expect(enterQuote(rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: [{ itemId: items[0]!.id, inclusion: 'included' }] }))
+    const { event, rfp, items, good } = await fixture();
+    await expect(enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: [{ itemId: items[0]!.id, inclusion: 'included' }] }))
       .rejects.toThrow('"Service staff" is not answered');
-    await expect(enterQuote(rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: items.map((it) => ({ itemId: it.id, inclusion: 'extra' as const })) }))
+    await expect(enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: items.map((it) => ({ itemId: it.id, inclusion: 'extra' as const })) }))
       .rejects.toThrow('The extra cost for "Lunch"');
     expect(await prisma.quote.count()).toBe(0);
   });
 
   it('a revised quote replaces the vendor\'s last one', async () => {
-    const { rfp, good, answer } = await fixture();
-    await enterQuote(rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'extra', 'included']) });
-    await enterQuote(rfp.id, { vendorId: good.id, baseCents: 6_500, basePerHead: true, receivedOn: '2026-09-02', lines: answer(['included', 'included', 'included']) });
+    const { event, rfp, good, answer } = await fixture();
+    await enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_000, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'extra', 'included']) });
+    await enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 6_500, basePerHead: true, receivedOn: '2026-09-02', lines: answer(['included', 'included', 'included']) });
     const [r] = (await rfpBoard(rfp.eventId, clock)).rfps;
     expect(r!.comparison.quotes.map((q) => q.totalCents)).toEqual([6_500 * 260]);
   });
 
   it('awards at the figure shown: a budget commitment and a contract, in one transaction', async () => {
     const { event, rfp, good, answer } = await fixture();
-    const quote = await enterQuote(rfp.id, { vendorId: good.id, baseCents: 7_200, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'extra', 'included']) });
+    const quote = await enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_200, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'extra', 'included']) });
     const total = 7_200 * 260 + 30_000 * 12;
-    const c = await award(quote.id, total, clock);
+    const c = await award(event.id, quote.id, total, clock);
     expect(c).toMatchObject({ committedCents: total, headcount: 260, papers: [], gaps: [], status: 'awarded' });
 
     const budget = await budgetToActuals(event.id);
@@ -100,28 +100,28 @@ describe('quotes and the award', () => {
     expect(budget.lines[0]).toMatchObject({ id: c.budgetLineId, category: 'catering', committedCents: total, vendorId: good.id, description: 'Day 1 catering — Good Catering (RFP award, 260 registered)' });
 
     // Closed: no second award, no revised quote, no quantity change.
-    await expect(award(quote.id, total, clock)).rejects.toThrow('is awarded');
-    await expect(enterQuote(rfp.id, { vendorId: good.id, baseCents: 1, basePerHead: false, receivedOn: '2026-09-02', lines: answer(['included', 'included', 'included']) })).rejects.toThrow('is awarded');
+    await expect(award(event.id, quote.id, total, clock)).rejects.toThrow('is awarded');
+    await expect(enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 1, basePerHead: false, receivedOn: '2026-09-02', lines: answer(['included', 'included', 'included']) })).rejects.toThrow('is awarded');
 
-    await advanceContract(c.id, clock);
-    await advanceContract(c.id, clock);
+    await advanceContract(event.id, c.id, clock);
+    await advanceContract(event.id, c.id, clock);
     expect((await prisma.contract.findUniqueOrThrow({ where: { id: c.id } })).status).toBe('signed');
-    await expect(advanceContract(c.id, clock)).rejects.toThrow('already signed');
+    await expect(advanceContract(event.id, c.id, clock)).rejects.toThrow('already signed');
   });
 
   it('refuses the award when the headcount moved since the page showed the total', async () => {
     const { event, rfp, good, answer } = await fixture();
-    const quote = await enterQuote(rfp.id, { vendorId: good.id, baseCents: 7_200, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'included']) });
+    const quote = await enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_200, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'included']) });
     await setRegistration(event.id, 'Sales', 230, 250);
-    await expect(award(quote.id, 7_200 * 260, clock)).rejects.toThrow(`now totals $19,440.00, not $18,720.00`);
+    await expect(award(event.id, quote.id, 7_200 * 260, clock)).rejects.toThrow(`now totals $19,440.00, not $18,720.00`);
     expect(await prisma.budgetLine.count()).toBe(0);
     expect(await prisma.contract.count()).toBe(0);
   });
 
   it('an award to a vendor with lapsed papers is recorded as flagged, with its gaps, and puts the vendor on the compliance worklist', async () => {
     const { event, rfp, lapsed, answer } = await fixture();
-    const quote = await enterQuote(rfp.id, { vendorId: lapsed.id, baseCents: 1_500_000, basePerHead: false, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'excluded']) });
-    const c = await award(quote.id, 1_500_000, clock);
+    const quote = await enterQuote(event.id, rfp.id, { vendorId: lapsed.id, baseCents: 1_500_000, basePerHead: false, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'excluded']) });
+    const c = await award(event.id, quote.id, 1_500_000, clock);
     expect(c.papers).toEqual(['certificate of insurance expires Tue, Oct 13, before the show ends', 'no W-9 on file']);
     expect(c.gaps).toEqual(['Linens']);
     const board = await complianceBoard(event.id, clock);
@@ -131,7 +131,24 @@ describe('quotes and the award', () => {
   it('an RFP needs a schema, and a per-head line has no quantity to set', async () => {
     const { event, items } = await fixture();
     await expect(createRfp(event.id, 'av', 'AV', clock)).rejects.toThrow(RfpRefused);
-    await expect(setQuantity(items[0]!.id, 5)).rejects.toThrow('per head');
+    await expect(setQuantity(event.id, items[0]!.id, 5)).rejects.toThrow('per head');
     await expect(setRegistration(event.id, 'Sales', -1, 10)).rejects.toThrow('Registered');
+  });
+});
+
+describe('event scoping (SEC-02)', () => {
+  it('another event\'s RFP line, RFP, quote and contract read as not found, and nothing moves', async () => {
+    const { event, rfp, items, good, answer } = await fixture();
+    const other = await makeEvent();
+    await expect(setQuantity(other.id, items[1]!.id, 99)).rejects.toThrow('No such line');
+    await expect(enterQuote(other.id, rfp.id, { vendorId: good.id, baseCents: 1, basePerHead: false, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'included']) })).rejects.toThrow('No such RFP');
+    const quote = await enterQuote(event.id, rfp.id, { vendorId: good.id, baseCents: 7_200, basePerHead: true, receivedOn: '2026-09-01', lines: answer(['included', 'included', 'included']) });
+    await expect(award(other.id, quote.id, 7_200 * 260, clock)).rejects.toThrow('No such quote');
+    expect(await prisma.contract.count()).toBe(0);
+    const c = await award(event.id, quote.id, 7_200 * 260, clock);
+    await expect(advanceContract(other.id, c.id, clock)).rejects.toThrow('No such contract');
+    expect((await prisma.contract.findUniqueOrThrow({ where: { id: c.id } })).status).toBe('awarded');
+    expect((await prisma.rfpItem.findUniqueOrThrow({ where: { id: items[1]!.id } })).quantity).toBe(12);
+    expect(await prisma.quote.count()).toBe(1);
   });
 });

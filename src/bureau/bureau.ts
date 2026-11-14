@@ -83,11 +83,11 @@ async function loadCtx(tx: Tx, speakerId: string): Promise<GuardCtx> {
 }
 
 /** Advance one step. Refuses a skip, and refuses with the guard's own reason if `to` isn't earned yet. */
-export async function advance(speakerId: string, clock: Clock) {
+export async function advance(eventId: string, speakerId: string, clock: Clock) {
   return prisma.$transaction(async (tx) => {
     const [row] = await tx.$queryRaw<{ name: string; state: SpeakerState }[]>`
-      SELECT name, state FROM "Speaker" WHERE id = ${speakerId} FOR UPDATE`;
-    if (!row) throw new SpeakerRefused(`No speaker ${speakerId}`);
+      SELECT name, state FROM "Speaker" WHERE id = ${speakerId} AND "eventId" = ${eventId} FOR UPDATE`;
+    if (!row) throw new SpeakerRefused(`No speaker ${speakerId} on this event`);
     const { name, state: current } = row;
     const i = LIFECYCLE.indexOf(current);
     if (i === LIFECYCLE.length - 1) throw new SpeakerRefused(`${name} is already released`);
@@ -100,11 +100,11 @@ export async function advance(speakerId: string, clock: Clock) {
 }
 
 /** A producer's correction: back to an earlier state, with a reason. Guards do not run — the correction is what fixes a wrong one. */
-export async function revert(speakerId: string, to: SpeakerState, reason: string, clock: Clock) {
+export async function revert(eventId: string, speakerId: string, to: SpeakerState, reason: string, clock: Clock) {
   if (!reason.trim()) throw new SpeakerRefused('A step back needs a reason');
   return prisma.$transaction(async (tx) => {
-    const speaker = await tx.speaker.findUnique({ where: { id: speakerId } });
-    if (!speaker) throw new SpeakerRefused(`No speaker ${speakerId}`);
+    const speaker = await tx.speaker.findFirst({ where: { id: speakerId, eventId } });
+    if (!speaker) throw new SpeakerRefused(`No speaker ${speakerId} on this event`);
     if (LIFECYCLE.indexOf(to) >= LIFECYCLE.indexOf(speaker.state)) {
       throw new SpeakerRefused(`${speaker.name} is already at or before ${to}`);
     }
@@ -116,17 +116,26 @@ export async function revert(speakerId: string, to: SpeakerState, reason: string
 /** `contractSignedOn` is the calendar day the contract was signed, 'YYYY-MM-DD' (D-054) — a day, not an instant. */
 export type ProfileInput = { bio?: string; avNeeds?: string; honorariumCents?: number | null; contractSignedOn?: LocalDate | null; headshotUrl?: string | null };
 
-export async function setProfile(speakerId: string, input: ProfileInput) {
+/** Every write by speaker id is scoped to the event in the path (SEC-02): another event's speaker reads as not found. */
+async function speakerOn(eventId: string, speakerId: string) {
+  if (!(await prisma.speaker.findFirst({ where: { id: speakerId, eventId }, select: { id: true } }))) {
+    throw new SpeakerRefused(`No speaker ${speakerId} on this event`);
+  }
+}
+
+export async function setProfile(eventId: string, speakerId: string, input: ProfileInput) {
   if (input.contractSignedOn != null) {
     try { localDate(input.contractSignedOn); } catch { throw new SpeakerRefused(`The contract-signed date is not a calendar day: ${input.contractSignedOn}`); }
   }
+  await speakerOn(eventId, speakerId);
   return prisma.speaker.update({ where: { id: speakerId }, data: input });
 }
 
 export type ConsentInput = { recordSession: boolean; distributeDeck: boolean; publishVideo: boolean };
 
 /** Stamps `consentRecordedAt`, so "recorded" can never drift from the flags it describes. */
-export function setConsent(speakerId: string, input: ConsentInput, clock: Clock) {
+export async function setConsent(eventId: string, speakerId: string, input: ConsentInput, clock: Clock) {
+  await speakerOn(eventId, speakerId);
   return prisma.speaker.update({
     where: { id: speakerId },
     data: {

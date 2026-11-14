@@ -23,7 +23,7 @@ describe('contractSignedOn round trip', () => {
 
   it.each(days)('%s goes in and comes back as the same day, whatever the process TZ', async (day) => {
     const speaker = await makeSpeaker((await makeEvent()).id);
-    await setProfile(speaker.id, { contractSignedOn: day });
+    await setProfile(speaker.eventId, speaker.id, { contractSignedOn: day });
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).contractSignedOn).toBe(day);
     // And the column holds exactly those ten characters.
     const [raw] = await prisma.$queryRaw<{ v: string }[]>`SELECT "contractSignedOn" AS v FROM "Speaker" WHERE id = ${speaker.id}`;
@@ -32,15 +32,15 @@ describe('contractSignedOn round trip', () => {
 
   it('clearing it stores null', async () => {
     const speaker = await makeSpeaker((await makeEvent()).id);
-    await setProfile(speaker.id, { contractSignedOn: '2026-08-15' });
-    await setProfile(speaker.id, { contractSignedOn: null });
+    await setProfile(speaker.eventId, speaker.id, { contractSignedOn: '2026-08-15' });
+    await setProfile(speaker.eventId, speaker.id, { contractSignedOn: null });
     expect((await prisma.speaker.findUniqueOrThrow({ where: { id: speaker.id } })).contractSignedOn).toBeNull();
   });
 
   it('refuses a string that is not a calendar day, in the module and in the database', async () => {
     const speaker = await makeSpeaker((await makeEvent()).id);
     for (const bad of ['2026-02-30', '2026-8-15', '2026-08-15T00:00:00Z', '15/08/2026']) {
-      await expect(setProfile(speaker.id, { contractSignedOn: bad })).rejects.toThrow(SpeakerRefused);
+      await expect(setProfile(speaker.eventId, speaker.id, { contractSignedOn: bad })).rejects.toThrow(SpeakerRefused);
       expect(() => localDate(bad)).toThrow(`Not a date: ${bad}`);
     }
     // Past the module, the CHECK constraint holds the shape.

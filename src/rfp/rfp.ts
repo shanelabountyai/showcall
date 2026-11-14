@@ -111,21 +111,22 @@ export async function createRfp(eventId: string, category: BudgetCategory, title
 }
 
 /** Serialize writes to an RFP: an award reads the quotes it prices. */
-const lock = async (tx: Tx, rfpId: string) => {
+const lock = async (tx: Tx, eventId: string, rfpId: string) => {
   await tx.$executeRaw`SELECT 1 FROM "Rfp" WHERE id = ${rfpId} FOR UPDATE`;
-  const rfp = await tx.rfp.findUnique({ where: { id: rfpId }, include: { items: { orderBy: { position: 'asc' } }, contract: true } });
+  // Scoped to the event in the path (SEC-02): another event's RFP reads as not found.
+  const rfp = await tx.rfp.findFirst({ where: { id: rfpId, eventId }, include: { items: { orderBy: { position: 'asc' } }, contract: true } });
   if (!rfp) throw new RfpRefused('No such RFP');
   if (rfp.contract) throw new RfpRefused(`"${rfp.title}" is awarded; its quotes and lines are closed`);
   return rfp;
 };
 
-export async function setQuantity(itemId: string, quantity: number) {
+export async function setQuantity(eventId: string, itemId: string, quantity: number) {
   whole(quantity, 'Quantity', 1);
-  const item = await prisma.rfpItem.findUnique({ where: { id: itemId } });
+  const item = await prisma.rfpItem.findFirst({ where: { id: itemId, rfp: { eventId } } });
   if (!item) throw new RfpRefused('No such line');
   if (item.basis !== 'each') throw new RfpRefused(`"${item.label}" is ${item.basis === 'per_head' ? 'per head — its quantity is the headcount' : 'flat'}`);
   return prisma.$transaction(async (tx) => {
-    await lock(tx, item.rfpId);
+    await lock(tx, eventId, item.rfpId);
     return tx.rfpItem.update({ where: { id: itemId }, data: { quantity } });
   });
 }
@@ -133,10 +134,10 @@ export async function setQuantity(itemId: string, quantity: number) {
 export type QuoteInput = { vendorId: string; baseCents: number; basePerHead: boolean; receivedOn: LocalDate; lines: { itemId: string; inclusion: Inclusion; unitCents?: number | null }[] };
 
 /** Enter a vendor's quote, every line answered. A revised quote from the same vendor replaces the last one until the award. */
-export async function enterQuote(rfpId: string, input: QuoteInput) {
+export async function enterQuote(eventId: string, rfpId: string, input: QuoteInput) {
   cents(input.baseCents, 'The base price');
   return prisma.$transaction(async (tx) => {
-    const rfp = await lock(tx, rfpId);
+    const rfp = await lock(tx, eventId, rfpId);
     const given = new Map(input.lines.map((l) => [l.itemId, l]));
     const lines = rfp.items.map((item) => {
       const l = given.get(item.id);
@@ -173,11 +174,11 @@ async function priced(db: Tx, rfpId: string) {
  * quote's gaps are recorded on the contract rather than refused — the award
  * is the producer's call, and the flag is what makes it an informed one.
  */
-export async function award(quoteId: string, expectedCents: number, clock: Clock) {
-  const q = await prisma.quote.findUnique({ where: { id: quoteId } });
+export async function award(eventId: string, quoteId: string, expectedCents: number, clock: Clock) {
+  const q = await prisma.quote.findFirst({ where: { id: quoteId, rfp: { eventId } } });
   if (!q) throw new RfpRefused('No such quote');
   return prisma.$transaction(async (tx) => {
-    const rfp = await lock(tx, q.rfpId);
+    const rfp = await lock(tx, eventId, q.rfpId);
     const { comparison } = await priced(tx, rfp.id);
     const p = comparison.quotes.find((x) => x.id === quoteId);
     if (!p) throw new RfpRefused('That quote was revised while you were looking. Look again.');
@@ -199,8 +200,8 @@ export async function award(quoteId: string, expectedCents: number, clock: Clock
 const NEXT: Partial<Record<ContractStatus, ContractStatus>> = { awarded: 'sent', sent: 'signed' };
 
 /** Awarded → sent → signed; forward only. */
-export async function advanceContract(contractId: string, clock: Clock) {
-  const c = await prisma.contract.findUnique({ where: { id: contractId } });
+export async function advanceContract(eventId: string, contractId: string, clock: Clock) {
+  const c = await prisma.contract.findFirst({ where: { id: contractId, rfp: { eventId } } });
   if (!c) throw new RfpRefused('No such contract');
   const to = NEXT[c.status];
   if (!to) throw new RfpRefused('That contract is already signed');

@@ -67,7 +67,7 @@ export default async function Budget({ params, searchParams }: { params: Promise
 
   async function doUpdate(form: FormData) {
     'use server';
-    await refusable(here, () => updateLine(String(form.get('lineId')), { committedCents: amount(form, 'committed'), actualCents: amount(form, 'actual') }), BudgetRefused);
+    await refusable(here, () => updateLine(eventId, String(form.get('lineId')), { committedCents: amount(form, 'committed'), actualCents: amount(form, 'actual') }), BudgetRefused);
   }
 
   async function doSnapshot(form: FormData) {

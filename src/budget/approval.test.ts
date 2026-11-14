@@ -47,7 +47,7 @@ describe('the client portal', () => {
     await expect(decideBudget(token, v1.id, { approved: true, signedBy: 'Dana Ruiz' }, clock)).rejects.toThrow(/already declined/);
     expect((await approvalState(event.id)).baseline).toBeNull();
 
-    await updateLine(led.id, { committedCents: 1_600_000 });
+    await updateLine(event.id, led.id, { committedCents: 1_600_000 });
     const v2 = await takeSnapshot(event.id, 'client v2', clock, true);
     await expect(decideBudget(token, v1.id, { approved: true, signedBy: 'Dana Ruiz' }, clock)).rejects.toThrow(/not the latest/);
     const yes = await decideBudget(token, v2.id, { approved: true, signedBy: 'Dana Ruiz' }, clock);
@@ -55,7 +55,7 @@ describe('the client portal', () => {
     expect(await approvalState(event.id)).toMatchObject({ baseline: { id: v2.id }, unapprovedCents: 0 });
 
     // A change order after approval: the new figure is shown against the approved one.
-    await updateLine(led.id, { committedCents: 1_985_000 });
+    await updateLine(event.id, led.id, { committedCents: 1_985_000 });
     expect(await approvalState(event.id)).toMatchObject({ unapproved: [{ description: 'LED wall', cents: 385_000, isNew: false }] });
     await takeSnapshot(event.id, 'client v3', clock, true);
     expect((await resolveClientPortal(token, clock))!.sent!.lines[0]).toMatchObject({ cents: 1_985_000, wasCents: 1_600_000 });
@@ -85,13 +85,13 @@ describe('the close waits for the client', () => {
   it('names each unapproved line, and clears once the client approves', async () => {
     const event = await makeEvent();
     const led = await addLine(event.id, { category: 'av', description: 'LED wall', committedCents: 1_800_000 });
-    await updateLine(led.id, { actualCents: 1_800_000 });
+    await updateLine(event.id, led.id, { actualCents: 1_800_000 });
     const token = await issueClientLink(event.id);
     await decideBudget(token, (await takeSnapshot(event.id, 'client v1', clock, true)).id, { approved: true, signedBy: 'Dana' }, clock);
 
     const camera = await addLine(event.id, { category: 'av', description: 'Second IMAG camera', committedCents: 185_000 });
-    await updateLine(camera.id, { actualCents: 185_000 });
-    await updateLine(led.id, { actualCents: 1_900_000 });
+    await updateLine(event.id, camera.id, { actualCents: 185_000 });
+    await updateLine(event.id, led.id, { actualCents: 1_900_000 });
     await expect(closeBudget(event.id, 2_085_000, after)).rejects.toThrow(/Not approved by the client: LED wall, \+\$1,000\.00.*Second IMAG camera, \$1,850\.00/);
 
     const v2 = await takeSnapshot(event.id, 'client v2', clock, true);

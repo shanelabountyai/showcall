@@ -59,13 +59,13 @@ export default async function Rfps({ params, searchParams }: { params: Promise<{
   }
   async function doQuantity(form: FormData) {
     'use server';
-    await refusable(here, () => setQuantity(String(form.get('itemId')), Number(form.get('quantity'))), RfpRefused);
+    await refusable(here, () => setQuantity(eventId, String(form.get('itemId')), Number(form.get('quantity'))), RfpRefused);
   }
   async function doQuote(form: FormData) {
     'use server';
     await refusable(here, async () => {
       const itemIds = form.getAll('itemId').map(String);
-      return enterQuote(String(form.get('rfpId')), {
+      return enterQuote(eventId, String(form.get('rfpId')), {
         vendorId: String(form.get('vendorId')), baseCents: dollars(form, 'base', 'a base price'),
         basePerHead: form.get('perHead') === 'on', receivedOn: String(form.get('receivedOn')),
         lines: itemIds.map((itemId) => {
@@ -77,11 +77,11 @@ export default async function Rfps({ params, searchParams }: { params: Promise<{
   }
   async function doAward(form: FormData) {
     'use server';
-    await refusable(here, () => award(String(form.get('quoteId')), Number(form.get('expected')), systemClock), RfpRefused, BudgetRefused);
+    await refusable(here, () => award(eventId, String(form.get('quoteId')), Number(form.get('expected')), systemClock), RfpRefused, BudgetRefused);
   }
   async function doAdvance(form: FormData) {
     'use server';
-    await refusable(here, () => advanceContract(String(form.get('contractId')), systemClock), RfpRefused);
+    await refusable(here, () => advanceContract(eventId, String(form.get('contractId')), systemClock), RfpRefused);
   }
 
   return (
