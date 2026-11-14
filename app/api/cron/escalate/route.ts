@@ -1,6 +1,7 @@
 import { systemClock } from '@/src/clock';
 import { escalateAll } from '@/src/contingency/contingency';
 import { cronAllowed } from '@/src/cron-auth';
+import { sweepRateLimits } from '@/src/rate-limit';
 
 /**
  * The escalation sweep (D-022). Deployed, Vercel calls it daily (vercel.json,
@@ -10,5 +11,7 @@ import { cronAllowed } from '@/src/cron-auth';
  */
 export async function GET(req: Request) {
   if (!cronAllowed(req.headers.get('authorization'), process.env)) return new Response('Unauthorized', { status: 401 });
-  return Response.json({ escalated: await escalateAll(systemClock) });
+  const escalated = await escalateAll(systemClock);
+  await sweepRateLimits(systemClock); // portal rate-limit windows past a day (K5)
+  return Response.json({ escalated });
 }

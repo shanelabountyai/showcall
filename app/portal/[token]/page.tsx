@@ -1,6 +1,8 @@
+import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { systemClock } from '@/src/clock';
 import { ContentRefused, MAX_UPLOAD_BYTES, resolvePortal, submitterComment, submitVersion } from '@/src/content/pipeline';
+import { portalRead, portalWrite, RateLimited } from '@/src/rate-limit';
 import { refusable } from '../../events/[eventId]/refusable';
 import { Versions } from '../../versions';
 
@@ -14,6 +16,7 @@ export const dynamic = 'force-dynamic';
 export default async function Portal({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await params;
   const { error } = await searchParams;
+  if (!(await portalRead(await headers(), systemClock))) notFound();
   const owner = await resolvePortal(token, systemClock);
   if (!owner) notFound();
   const here = `/portal/${token}`;
@@ -23,12 +26,18 @@ export default async function Portal({ params, searchParams }: { params: Promise
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) redirect(`${here}?error=${encodeURIComponent('Choose a file to upload')}`);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await refusable(here, () => submitVersion(token, String(form.get('deliverableId')), { filename: file.name, mimeType: file.type, bytes }, systemClock), ContentRefused);
+    await refusable(here, async () => {
+      await portalWrite(token, systemClock);
+      return submitVersion(token, String(form.get('deliverableId')), { filename: file.name, mimeType: file.type, bytes }, systemClock);
+    }, ContentRefused, RateLimited);
   }
 
   async function doComment(form: FormData) {
     'use server';
-    await refusable(here, () => submitterComment(token, String(form.get('versionId')), String(form.get('body')), systemClock), ContentRefused);
+    await refusable(here, async () => {
+      await portalWrite(token, systemClock);
+      return submitterComment(token, String(form.get('versionId')), String(form.get('body')), systemClock);
+    }, ContentRefused, RateLimited);
   }
 
   return (
