@@ -109,5 +109,5 @@ Source: `~/Projects/saas foundation/audit/showcall.md` (full scorecard K1–K14 
 | ID | Item |
 |---|---|
 | OPS-01 | Do not connect the repo to Vercel, not even for previews, until SEC-01 lands. With git integration, every push creates a public preview URL, and in this app that means unauthenticated write access. |
-| OPS-02 | Add `SHOWCALL_ALLOW_CLOUD_DB` to `.env.example` as a name with a comment. |
+| OPS-02 | ✅ FIXED 2026-11-13 (`.env.example` names every key `src/env.ts` validates at boot; `src/env.test.ts` sweeps for strays). Add `SHOWCALL_ALLOW_CLOUD_DB` to `.env.example` as a name with a comment. |
 | OPS-03 | Confirm in the Vercel dashboard that no `showcall` project exists, since the API listing returned none (UNVERIFIED). |
