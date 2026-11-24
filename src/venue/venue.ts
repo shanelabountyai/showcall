@@ -51,11 +51,13 @@ export const setEventVenue = (eventId: string, venueId: string) => prisma.$trans
   await recheck(tx, eventId);
 });
 
-export function setRoomSpec(roomId: string, spec: RoomSpecInput) {
+export function setRoomSpec(eventId: string, roomId: string, spec: RoomSpecInput) {
   if ((spec.ceilingFt !== null && !whole(spec.ceilingFt, 1)) || !whole(spec.rigPoints) || !whole(spec.rigPointLbs) || !whole(spec.powerAmps)) {
     throw new VenueRefused('Room specs are whole numbers, not negative; leave the ceiling blank for open air');
   }
   return prisma.$transaction(async (tx) => {
+    // Scoped to the event (SEC-02): another event's room reads as not found.
+    if (!(await tx.room.findFirst({ where: { id: roomId, eventId }, select: { id: true } }))) throw new VenueRefused('No such room on this event');
     const room = await tx.room.update({ where: { id: roomId }, data: spec });
     await recheck(tx, room.eventId);
     return room;

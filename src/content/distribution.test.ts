@@ -30,7 +30,7 @@ async function setup() {
   return { event, a, b, dana, marcus, priya, late, keynote, room };
 }
 
-const locked = async (speakerId: string) => { const v = await makeDeck(speakerId, 'passed'); await approve(v.id, clock); return v; };
+const locked = async (speakerId: string) => { const v = await makeDeck(speakerId, 'passed'); await approve((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).eventId, v.id, clock); return v; };
 
 describe('room package', () => {
   it('is in running order, names each gap, and has no consent check — playback is not distribution', async () => {
@@ -72,7 +72,7 @@ describe('stale packages (the staleness fixture)', () => {
 
     const v2 = await makeDeck(dana.id, 'passed');
     expect((await packageStatus(event.id, room)).stale).toBe(false); // an upload alone is not the show file
-    await override(v2.id, 'The 11pm v2', clock);
+    await override(event.id, v2.id, 'The 11pm v2', clock);
     const s = await packageStatus(event.id, room);
     expect(s.stale).toBe(true);
     expect(s.added).toEqual([expect.stringMatching(/Dana Reyes: Main deck v2$/)]);
@@ -129,7 +129,7 @@ describe('attendees package — the consent no-path sweep (hard rule 6)', () => 
     const speakers = [];
     for (const [i, consent] of combos.entries()) {
       const s = await makeSpeaker(event.id, { name: `Speaker ${String.fromCharCode(65 + i)}` });
-      if (consent) await setConsent(s.id, consent, clock);
+      if (consent) await setConsent(event.id, s.id, consent, clock);
       const v = await locked(s.id);
       await makeSession(event.id, room.id, D1, 480 + i * 60, 520 + i * 60, [s.id]);
       speakers.push({ v, row: await prisma.speaker.findUniqueOrThrow({ where: { id: s.id } }) });
@@ -158,14 +158,14 @@ describe('attendees package — the consent no-path sweep (hard rule 6)', () => 
     const event = await makeEvent();
     const room = await prisma.room.create({ data: { eventId: event.id, name: 'Ballroom A' } });
     const s = await makeSpeaker(event.id, { name: 'Dana Reyes' });
-    await setConsent(s.id, { recordSession: true, distributeDeck: true, publishVideo: true }, clock);
+    await setConsent(event.id, s.id, { recordSession: true, distributeDeck: true, publishVideo: true }, clock);
     const v = await locked(s.id);
     await makeSession(event.id, room.id, D1, 540, 600, [s.id]);
     await publishAgenda(event.id, clock);
     const scope = { audience: 'attendees' } as const;
     await buildPackage(event.id, scope, clock);
 
-    await setConsent(s.id, { recordSession: true, distributeDeck: false, publishVideo: true }, clock);
+    await setConsent(event.id, s.id, { recordSession: true, distributeDeck: false, publishVideo: true }, clock);
     const status = await packageStatus(event.id, scope);
     expect(status.stale).toBe(true);
     expect(status.removed).toEqual([expect.stringMatching(/Dana Reyes: Main deck v1$/)]);

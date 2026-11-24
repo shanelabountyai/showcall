@@ -1,6 +1,8 @@
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { systemClock } from '@/src/clock';
 import { resolveRecap } from '@/src/content/recap';
+import { portalRead } from '@/src/rate-limit';
 import { hhmm, shortDay } from '@/src/time';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function Recap({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await portalRead(await headers(), systemClock))) notFound();
   const r = await resolveRecap(token, systemClock);
   if (!r) notFound();
   return (

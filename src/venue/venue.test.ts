@@ -134,13 +134,22 @@ describe('profile edits re-check what is planned', () => {
   });
 
   it('derating a room under a planned rig is refused', async () => {
-    const { ballroom } = await show();
-    await expect(setRoomSpec(ballroom.id, { ceilingFt: 24, rigPoints: 12, rigPointLbs: 500, powerAmps: 400 })).rejects.toThrow('rated 500 lb');
-    await setRoomSpec(ballroom.id, { ceilingFt: 30, rigPoints: 16, rigPointLbs: 1000, powerAmps: 600 });
+    const { event, ballroom } = await show();
+    await expect(setRoomSpec(event.id, ballroom.id, { ceilingFt: 24, rigPoints: 12, rigPointLbs: 500, powerAmps: 400 })).rejects.toThrow('rated 500 lb');
+    await setRoomSpec(event.id, ballroom.id, { ceilingFt: 30, rigPoints: 16, rigPointLbs: 1000, powerAmps: 600 });
   });
 
   it('an ordinary cue never meets the venue check', async () => {
     const { event, ballroom } = await show();
     await addCue(event.id, ballroom.id, { ...blank, label: 'Midnight strike', durationMin: 60, day: D1, startMin: 1380 });
+  });
+});
+
+describe('event scoping (SEC-02)', () => {
+  it('another event\'s room reads as not found, and its spec is unchanged', async () => {
+    const { ballroom } = await show();
+    const other = await makeEvent();
+    await expect(setRoomSpec(other.id, ballroom.id, { ceilingFt: 99, rigPoints: 99, rigPointLbs: 9_999, powerAmps: 9_999 })).rejects.toThrow('No such room on this event');
+    expect(await prisma.room.findUniqueOrThrow({ where: { id: ballroom.id } })).toMatchObject({ ceilingFt: 24, rigPoints: 12 });
   });
 });

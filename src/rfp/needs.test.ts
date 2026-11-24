@@ -37,8 +37,8 @@ async function show() {
   const caterer = await addVendor('Lakeshore Catering');
   await recordDoc(caterer.id, 'coi', '2026-01-01', '2027-01-01');
   await recordDoc(caterer.id, 'w9', '2026-01-01', null);
-  const quote = await enterQuote(rfp.id, { vendorId: caterer.id, baseCents: 5_000, basePerHead: true, receivedOn: '2026-09-01', lines: [{ itemId: item!.id, inclusion: 'included', unitCents: null }] });
-  await award(quote.id, 5_000 * 42, clock);
+  const quote = await enterQuote(event.id, rfp.id, { vendorId: caterer.id, baseCents: 5_000, basePerHead: true, receivedOn: '2026-09-01', lines: [{ itemId: item!.id, inclusion: 'included', unitCents: null }] });
+  await award(event.id, quote.id, 5_000 * 42, clock);
 
   const role = async (name: string, vendorId: string) => {
     const r = await prisma.callRole.create({ data: { eventId: event.id, name, reportTo: 'Dock B' } });

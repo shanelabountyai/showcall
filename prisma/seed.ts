@@ -156,11 +156,11 @@ const portalLinks: string[] = [];
 
 for (const [name, plan] of Object.entries(bureauPlan)) {
   const speakerId = sp[name]!;
-  if (plan.honorariumCents != null) await setProfile(speakerId, { honorariumCents: plan.honorariumCents, contractSignedOn: '2026-08-15', ...(plan.bio && { bio: plan.bio }) });
+  if (plan.honorariumCents != null) await setProfile(event.id, speakerId, { honorariumCents: plan.honorariumCents, contractSignedOn: '2026-08-15', ...(plan.bio && { bio: plan.bio }) });
   if (plan.rehearsal) {
     await saveSession(event.id, { title: `Rehearsal — ${name}`, day: d1, roomId: room[plan.rehearsal].id, startMin: at(7, 30), endMin: at(8), speakerIds: [speakerId], isRehearsal: true });
   }
-  if (plan.consent) await setConsent(speakerId, plan.consent, systemClock);
+  if (plan.consent) await setConsent(event.id, speakerId, plan.consent, systemClock);
   // Every speaker owes a deck from the moment they are booked: the chase
   // board can only chase a deliverable that exists, so the ones still behind
   // are the overdue rows on it.
@@ -174,9 +174,9 @@ for (const [name, plan] of Object.entries(bureauPlan)) {
       portalLinks.push(`${name}: /portal/${token}`);
     }
     const final = await submitVersion(token, deck.id, file(await deckPdf(name, false), `${name.toLowerCase().replace(/\W+/g, '-')}-deck-final.pdf`), systemClock);
-    await approve(final.id, systemClock);
+    await approve(event.id, final.id, systemClock);
   }
-  while ((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).state !== plan.target) await advance(speakerId, systemClock);
+  while ((await prisma.speaker.findUniqueOrThrow({ where: { id: speakerId } })).state !== plan.target) await advance(event.id, speakerId, systemClock);
 }
 
 await publishAgenda(event.id, systemClock);
@@ -316,8 +316,8 @@ const clientLink = await issueClientLink(event.id);
 const v1 = await takeSnapshot(event.id, 'Client-approved v1', fixedClock(new Date(systemClock.now().getTime() - 21 * DAY)), true);
 await decideBudget(clientLink, v1.id, { approved: true, signedBy: 'Dana Ruiz' }, fixedClock(new Date(systemClock.now().getTime() - 20 * DAY)));
 portalLinks.push(`Client budget approval: /portal/client/${clientLink}`);
-await updateLine(led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); // change order: second IMAG camera; deposit invoiced
-await updateLine(lunch.id, { actualCents: 15_120_00 });
+await updateLine(event.id, led.id, { committedCents: 19_850_00, actualCents: 9_925_00 }); // change order: second IMAG camera; deposit invoiced
+await updateLine(event.id, lunch.id, { actualCents: 15_120_00 });
 // The rain call: due 10:00 on day 2, anchored to the reception, so moving the
 // reception moves the deadline. S-17 executes it; the rain branch moves the
 // reception into Ballroom A after the closer and re-issues only the sheets it touches.
@@ -352,18 +352,18 @@ const hotelBlock = await createBlock(kickoff.id, {
   hotelId: hotel.id, rateCents: 23_900, contractedOn: addDays(d1, -120), cutoffOn: addDays(s1, -21),
   nights: [{ night: addDays(s1, -1), rooms: 40 }, { night: s1, rooms: 120 }, { night: addDays(s1, 1), rooms: 120 }],
 });
-await addThreshold(hotelBlock.id, addDays(s1, -60), 50);
-await addThreshold(hotelBlock.id, addDays(s1, -30), 80);
+await addThreshold(kickoff.id, hotelBlock.id, addDays(s1, -60), 50);
+await addThreshold(kickoff.id, hotelBlock.id, addDays(s1, -30), 80);
 const onDay = (n: number) => fixedClock(`${addDays(d1, n)}T17:00:00Z`);
 const stay = (arrive: number, nights: number) => ({ arriveOn: addDays(s1, arrive), departOn: addDays(s1, arrive + nights) });
-await reserve(hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — early registrants', rooms: 40, ...stay(-1, 3) }, onDay(-100));
-await reserve(hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — regional teams', rooms: 30, ...stay(0, 2) }, onDay(-50));
+await reserve(kickoff.id, hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — early registrants', rooms: 40, ...stay(-1, 3) }, onDay(-100));
+await reserve(kickoff.id, hotelBlock.id, { kind: 'attendee', guest: 'Hotel link — regional teams', rooms: 30, ...stay(0, 2) }, onDay(-50));
 for (const name of ['Priya Castellanos', 'Jonah Whitfield']) {
   const speakerId = (await prisma.speaker.create({ data: { eventId: kickoff.id, name } })).id;
-  await reserve(hotelBlock.id, { kind: 'speaker', speakerId, ...stay(0, 2) }, onDay(-10));
+  await reserve(kickoff.id, hotelBlock.id, { kind: 'speaker', speakerId, ...stay(0, 2) }, onDay(-10));
 }
-for (const s of await prisma.staff.findMany({ orderBy: { name: 'asc' }, take: 2 })) await reserve(hotelBlock.id, { kind: 'staff', staffId: s.id, ...stay(0, 2) }, onDay(-8));
-await reserve(hotelBlock.id, { kind: 'vip', guest: 'Northwind CEO', ...stay(0, 2) }, onDay(-5));
+for (const s of await prisma.staff.findMany({ orderBy: { name: 'asc' }, take: 2 })) await reserve(kickoff.id, hotelBlock.id, { kind: 'staff', staffId: s.id, ...stay(0, 2) }, onDay(-8));
+await reserve(kickoff.id, hotelBlock.id, { kind: 'vip', guest: 'Northwind CEO', ...stay(0, 2) }, onDay(-5));
 
 // RFPs: line-item schemas as data, the kickoff's registration (260), and a
 // catering RFP with three quotes — the cheapest leaves the afternoon break
@@ -378,7 +378,7 @@ for (const [category, lines] of Object.entries(SCHEMA)) for (const [label, basis
 for (const [type, registered, capacity] of [['Sales reps', 215, 250], ['Regional managers', 30, 30], ['Guests', 15, 20]] as const) await setRegistration(kickoff.id, type, registered, capacity);
 const rfp = await createRfp(kickoff.id, 'catering', 'Kickoff catering', onDay(-12));
 const rfpItems = await prisma.rfpItem.findMany({ where: { rfpId: rfp.id }, orderBy: { position: 'asc' } });
-await setQuantity(rfpItems.find((i) => i.label === 'Service staff')!.id, 12);
+await setQuantity(kickoff.id, rfpItems.find((i) => i.label === 'Service staff')!.id, 12);
 const harvest = await addVendor('Harvest Table Co.');
 await recordDoc(harvest.id, 'coi', addDays(d1, -90), addDays(d1, 275));
 await recordDoc(harvest.id, 'w9', addDays(d1, -90), null);
@@ -386,7 +386,7 @@ const summit = await addVendor('Summit Hospitality Group');
 await recordDoc(summit.id, 'coi', addDays(s1, -365), s1);
 await recordDoc(summit.id, 'w9', addDays(s1, -365), null);
 type Ans = Record<string, number | 'excluded'>; // a label maps to its extra cost in dollars, or is excluded; unlisted is included
-const quote = (vendorId: string, baseDollars: number, basePerHead: boolean, ans: Ans, day: number) => enterQuote(rfp.id, {
+const quote = (vendorId: string, baseDollars: number, basePerHead: boolean, ans: Ans, day: number) => enterQuote(kickoff.id, rfp.id, {
   vendorId, baseCents: baseDollars * 100, basePerHead, receivedOn: addDays(d1, day),
   lines: rfpItems.map((i) => { const a = ans[i.label]; return a == null ? { itemId: i.id, inclusion: 'included' as const } : a === 'excluded' ? { itemId: i.id, inclusion: a } : { itemId: i.id, inclusion: 'extra' as const, unitCents: a * 100 }; }),
 });

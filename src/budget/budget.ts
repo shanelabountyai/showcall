@@ -42,8 +42,9 @@ export async function addLine(eventId: string, input: LineInput, db: Tx = prisma
 }
 
 /** Actuals arrive as invoices do; a change order moves the commitment. Either way the old figure lives in the snapshots. */
-export async function updateLine(lineId: string, change: { committedCents?: number; actualCents?: number }) {
-  const line = await prisma.budgetLine.findUnique({ where: { id: lineId }, select: { eventId: true } });
+export async function updateLine(eventId: string, lineId: string, change: { committedCents?: number; actualCents?: number }) {
+  // Scoped to the event in the path (SEC-02): another event's line reads as not found.
+  const line = await prisma.budgetLine.findFirst({ where: { id: lineId, eventId }, select: { eventId: true } });
   if (!line) throw new BudgetRefused('No such budget line');
   await assertOpen(prisma, line.eventId);
   return prisma.budgetLine.update({

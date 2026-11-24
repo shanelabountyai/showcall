@@ -44,7 +44,7 @@ describe('budget-to-actuals', () => {
 
   it('totals by category, with variance and the client-billable split', async () => {
     const { event, av } = await setup();
-    await updateLine(av.id, { actualCents: 1_950_000 }); // the invoice came in over
+    await updateLine(event.id, av.id, { actualCents: 1_950_000 }); // the invoice came in over
     const view = await budgetToActuals(event.id);
     expect(view.categories.map((c) => [c.category, c.committed, c.actual, c.variance])).toEqual([
       ['av', 1_800_000, 1_950_000, 150_000],
@@ -59,7 +59,7 @@ describe('budget-to-actuals', () => {
     const s1 = await takeSnapshot(event.id, 'client v1', clock);
     expect([s1.number, s1.committedCents, s1.billableCents]).toEqual([1, 4_350_000, 4_200_000]);
 
-    await updateLine(av.id, { committedCents: 2_100_000 }); // change order
+    await updateLine(event.id, av.id, { committedCents: 2_100_000 }); // change order
     await addLine(event.id, { category: 'decor', description: 'Stage florals', committedCents: 60_000 });
     const view = await budgetToActuals(event.id);
     expect(view.sinceSnapshot).toBe(360_000);
@@ -81,5 +81,14 @@ describe('budget-to-actuals', () => {
   it('refuses a snapshot with no label', async () => {
     const { event } = await setup();
     await expect(takeSnapshot(event.id, ' ', clock)).rejects.toThrow(BudgetRefused);
+  });
+});
+
+describe('event scoping (SEC-02)', () => {
+  it('updating another event\'s line is refused as not found, and the line is unchanged', async () => {
+    const event = await makeEvent(), other = await makeEvent();
+    const line = await addLine(event.id, { category: 'av', description: 'LED wall', committedCents: 1_800_000 });
+    await expect(updateLine(other.id, line.id, { committedCents: 1, actualCents: 1 })).rejects.toThrow('No such budget line');
+    expect(await prisma.budgetLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ committedCents: 1_800_000, actualCents: 0 });
   });
 });

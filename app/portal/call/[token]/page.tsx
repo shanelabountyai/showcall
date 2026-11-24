@@ -1,8 +1,10 @@
+import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { confirmReceipt, PortalRefused, submitCoi } from '@/src/callsheet/portal';
 import { systemClock } from '@/src/clock';
 import { MAX_UPLOAD_BYTES } from '@/src/content/pipeline';
 import { buildFrame, type CrewData } from '@/src/live/frames';
+import { portalRead, portalWrite, RateLimited } from '@/src/rate-limit';
 import { fromDbDate, shortDay } from '@/src/time';
 import { refusable } from '../../../events/[eventId]/refusable';
 import { LiveChip, LiveProvider } from '../../../live-stream';
@@ -22,6 +24,7 @@ const stamp = (d: Date | string) => `${new Date(d).toISOString().slice(0, 16).re
 export default async function CrewPortal({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await params;
   const { error } = await searchParams;
+  if (!(await portalRead(await headers(), systemClock))) notFound();
   const frame = await buildFrame('crew', token, { clock: systemClock, since: null });
   if (!frame) notFound();
   const p = frame.data as CrewData;
@@ -30,7 +33,10 @@ export default async function CrewPortal({ params, searchParams }: { params: Pro
 
   async function doConfirm(form: FormData) {
     'use server';
-    await refusable(here, () => confirmReceipt(token, String(form.get('issueId')), systemClock), PortalRefused);
+    await refusable(here, async () => {
+      await portalWrite(token, systemClock);
+      return confirmReceipt(token, String(form.get('issueId')), systemClock);
+    }, PortalRefused, RateLimited);
   }
 
   async function doCoi(form: FormData) {
@@ -38,7 +44,10 @@ export default async function CrewPortal({ params, searchParams }: { params: Pro
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) redirect(`${here}?error=${encodeURIComponent('Choose a file to upload')}`);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await refusable(here, () => submitCoi(token, { filename: file.name, mimeType: file.type, bytes }, String(form.get('expiresOn')), systemClock), PortalRefused);
+    await refusable(here, async () => {
+      await portalWrite(token, systemClock);
+      return submitCoi(token, { filename: file.name, mimeType: file.type, bytes }, String(form.get('expiresOn')), systemClock);
+    }, PortalRefused, RateLimited);
   }
 
   return (

@@ -21,13 +21,13 @@ describe('show-file locks on the live channel', () => {
     const speaker = await makeSpeaker(event.id, { name: 'Hollis Grant' });
     let v = await makeDeck(speaker.id, 'passed');
     for (let i = 2; i <= 7; i++) v = await makeDeck(speaker.id, 'passed');
-    await approve(v.id, clock);
+    await approve(event.id, v.id, clock);
     expect(await deckState(event.id)).toMatchObject({ owner: 'Hollis Grant', latest: 7, showFile: 7 });
 
     const v8 = await makeDeck(speaker.id, 'passed'); // after lock: kept, never the show file
     expect(await deckState(event.id)).toMatchObject({ latest: 8, showFile: 7 });
 
-    await override(v8.id, 'Speaker fixed a typo on slide 4', clock);
+    await override(event.id, v8.id, 'Speaker fixed a typo on slide 4', clock);
     expect(await deckState(event.id)).toMatchObject({ latest: 8, showFile: 8 });
   });
 

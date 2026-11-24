@@ -84,13 +84,13 @@ async function setup() {
   const event = await makeEvent({ startDate: '2026-10-13', endDate: '2026-10-14' });
   const hotel = await prisma.vendor.create({ data: { name: 'Lakeview Grand' } });
   const block = await createBlock(event.id, { hotelId: hotel.id, rateCents: 24_000, contractedOn: '2026-06-15', cutoffOn: '2026-09-21', nights: NIGHTS });
-  const d60 = await addThreshold(block.id, '2026-08-14', 50);
-  const d30 = await addThreshold(block.id, '2026-09-13', 80);
+  const d60 = await addThreshold(event.id, block.id, '2026-08-14', 50);
+  const d30 = await addThreshold(event.id, block.id, '2026-09-13', 80);
   return { event, hotel, block, d60, d30 };
 }
 
 /** The pure fixture's 50 room-nights, booked on Jul 1. */
-const book50 = (blockId: string) => reserve(blockId, { kind: 'attendee', guest: 'Hotel link pickup', rooms: 25, arriveOn: '2026-10-12', departOn: '2026-10-14' }, at('2026-07-01'));
+const book50 = (block: { id: string; eventId: string }) => reserve(block.eventId, block.id, { kind: 'attendee', guest: 'Hotel link pickup', rooms: 25, arriveOn: '2026-10-12', departOn: '2026-10-14' }, at('2026-07-01'));
 
 describe('blocks and reservations', () => {
   it('refuses a contract that cannot be one', async () => {
@@ -100,7 +100,7 @@ describe('blocks and reservations', () => {
       await expect(createBlock(event.id, { ...base, ...bad })).rejects.toThrow(AttritionRefused);
     }
     for (const [day, pct] of [['2026-08-14', 60], ['2026-09-01', 0], ['2026-09-01', 101], ['2026-10-15', 80], ['2026-06-01', 80]] as const) {
-      await expect(addThreshold(block.id, day, pct)).rejects.toThrow(AttritionRefused);
+      await expect(addThreshold(event.id, block.id, day, pct)).rejects.toThrow(AttritionRefused);
     }
   });
 
@@ -109,14 +109,14 @@ describe('blocks and reservations', () => {
     const speaker = await makeSpeaker(event.id, { name: 'Dr. Amara Osei' });
     const staff = await makeStaff();
     const clock = at('2026-07-10');
-    await reserve(block.id, { kind: 'attendee', guest: 'Hotel link pickup', rooms: 37, arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock);
-    const r = await reserve(block.id, { kind: 'speaker', speakerId: speaker.id, arriveOn: '2026-10-12', departOn: '2026-10-15' }, clock);
-    await reserve(block.id, { kind: 'staff', staffId: staff.id, arriveOn: '2026-10-12', departOn: '2026-10-14' }, clock);
-    await reserve(block.id, { kind: 'vip', guest: 'Client CEO', arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock);
+    await reserve(event.id, block.id, { kind: 'attendee', guest: 'Hotel link pickup', rooms: 37, arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock);
+    const r = await reserve(event.id, block.id, { kind: 'speaker', speakerId: speaker.id, arriveOn: '2026-10-12', departOn: '2026-10-15' }, clock);
+    await reserve(event.id, block.id, { kind: 'staff', staffId: staff.id, arriveOn: '2026-10-12', departOn: '2026-10-14' }, clock);
+    await reserve(event.id, block.id, { kind: 'vip', guest: 'Client CEO', arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock);
     expect(r.guest).toBe('Dr. Amara Osei');
 
     // Oct 12 had 40: the speaker, the staffer and the VIP took the last three.
-    await expect(reserve(block.id, { kind: 'attendee', guest: 'Late', arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock)).rejects.toThrow('Only 0 rooms left in the block on Mon, Oct 12');
+    await expect(reserve(event.id, block.id, { kind: 'attendee', guest: 'Late', arriveOn: '2026-10-12', departOn: '2026-10-13' }, clock)).rejects.toThrow('Only 0 rooms left in the block on Mon, Oct 12');
     const [view] = (await attritionBoard(event.id, clock)).blocks;
     expect(Object.fromEntries(view!.byKind)).toEqual({ attendee: 37, speaker: 3, staff: 2, vip: 1 });
     expect(view!.thresholds[0]!.pickup).toBe(43);
@@ -124,14 +124,14 @@ describe('blocks and reservations', () => {
   });
 
   it('refuses rooms the block does not have, after the cutoff, and for someone else\'s speaker', async () => {
-    const { block } = await setup();
+    const { event, block } = await setup();
     const other = await makeEvent();
     const stranger = await makeSpeaker(other.id);
     const stay = { arriveOn: '2026-10-14', departOn: '2026-10-16' };
-    await expect(reserve(block.id, { kind: 'attendee', guest: 'A', ...stay }, at('2026-07-01'))).rejects.toThrow('no rooms on Thu, Oct 15');
-    await expect(reserve(block.id, { kind: 'attendee', guest: 'A', arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-09-22'))).rejects.toThrow(/cutoff was Mon, Sep 21: unsold rooms went back to Lakeview Grand/);
-    await expect(reserve(block.id, { kind: 'speaker', speakerId: stranger.id, arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-07-01'))).rejects.toThrow('speaker on this event');
-    await expect(reserve(block.id, { kind: 'vip', guest: ' ', arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-07-01'))).rejects.toThrow('guest name');
+    await expect(reserve(event.id, block.id, { kind: 'attendee', guest: 'A', ...stay }, at('2026-07-01'))).rejects.toThrow('no rooms on Thu, Oct 15');
+    await expect(reserve(event.id, block.id, { kind: 'attendee', guest: 'A', arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-09-22'))).rejects.toThrow(/cutoff was Mon, Sep 21: unsold rooms went back to Lakeview Grand/);
+    await expect(reserve(event.id, block.id, { kind: 'speaker', speakerId: stranger.id, arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-07-01'))).rejects.toThrow('speaker on this event');
+    await expect(reserve(event.id, block.id, { kind: 'vip', guest: ' ', arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-07-01'))).rejects.toThrow('guest name');
   });
 
   it('the database refuses a speaker room with no speaker, even past the module', async () => {
@@ -144,10 +144,10 @@ describe('blocks and reservations', () => {
 describe('decisions', () => {
   it('a release hands the rooms back, clears the alert, and is logged for good', async () => {
     const { event, block, d60 } = await setup();
-    await book50(block.id);
+    await book50(block);
     const clock = at('2026-08-04');
-    await expect(decide(d60.id, 'release', 79, clock)).rejects.toThrow('releasing 80 room-nights, not 79');
-    const decision = await decide(d60.id, 'release', 80, clock);
+    await expect(decide(event.id, d60.id, 'release', 79, clock)).rejects.toThrow('releasing 80 room-nights, not 79');
+    const decision = await decide(event.id, d60.id, 'release', 80, clock);
 
     const [view] = (await attritionBoard(event.id, clock)).blocks;
     expect(view!.thresholds[0]).toMatchObject({ state: 'on_pace', contracted: 120, open: 0 });
@@ -155,17 +155,17 @@ describe('decisions', () => {
     expect(view!.nights.map((n) => [n.night, n.released])).toEqual([['2026-10-12', 0], ['2026-10-13', 0], ['2026-10-14', 80]]);
     await expect(prisma.attritionDecision.update({ where: { id: decision.id }, data: { roomNights: 1 } })).rejects.toThrow(/append-only/);
     await expect(prisma.blockRelease.deleteMany({ where: { decisionId: decision.id } })).rejects.toThrow(/append-only/);
-    await expect(decide(d60.id, 'release', 0, clock)).rejects.toThrow('Nothing is open');
+    await expect(decide(event.id, d60.id, 'release', 0, clock)).rejects.toThrow('Nothing is open');
   });
 
   it('accepting posts the exposure to the budget against the hotel; a later threshold posts only its increment', async () => {
     const { event, hotel, block, d60, d30 } = await setup();
-    await book50(block.id);
+    await book50(block);
     const clock = at('2026-08-04');
-    await expect(decide(d60.id, 'accept', 900_000, clock)).rejects.toThrow('costs $9,600.00, not $9,000.00');
-    await decide(d60.id, 'accept', 960_000, clock);
-    await decide(d30.id, 'accept', 720_000, clock);
-    await expect(decide(d30.id, 'accept', 0, clock)).rejects.toThrow('Nothing is open');
+    await expect(decide(event.id, d60.id, 'accept', 900_000, clock)).rejects.toThrow('costs $9,600.00, not $9,000.00');
+    await decide(event.id, d60.id, 'accept', 960_000, clock);
+    await decide(event.id, d30.id, 'accept', 720_000, clock);
+    await expect(decide(event.id, d30.id, 'accept', 0, clock)).rejects.toThrow('Nothing is open');
 
     const budget = await budgetToActuals(event.id);
     expect(budget.lines.map((l) => [l.category, l.vendorId, l.committedCents])).toEqual([
@@ -179,12 +179,12 @@ describe('decisions', () => {
 
   it('a passed threshold can still be accepted but no longer released', async () => {
     const { event, block, d60 } = await setup();
-    await book50(block.id);
+    await book50(block);
     const clock = at('2026-08-20');
     const board = await attritionBoard(event.id, clock);
     expect(board.alerts.map((a) => a.says)).toEqual(['Accept $12,000.00: 50 room-nights short, too late to release']);
-    await expect(decide(d60.id, 'release', 100, clock)).rejects.toThrow('Too late to release: the threshold was Fri, Aug 14');
-    await decide(d60.id, 'accept', 1_200_000, clock);
+    await expect(decide(event.id, d60.id, 'release', 100, clock)).rejects.toThrow('Too late to release: the threshold was Fri, Aug 14');
+    await decide(event.id, d60.id, 'accept', 1_200_000, clock);
     expect((await attritionBoard(event.id, clock)).blocks[0]!.thresholds[0]!.state).toBe('accepted');
   });
 
@@ -193,5 +193,16 @@ describe('decisions', () => {
     await expect(prisma.attritionDecision.create({
       data: { blockId: block.id, thresholdId: d60.id, choice: 'accept', roomNights: 1, exposureCents: 24_000, decidedOn: toDbDate('2026-08-04'), decidedAt: new Date('2026-08-04T17:00:00Z') },
     })).rejects.toThrow(/AttritionDecision_check/);
+  });
+});
+
+describe('event scoping (SEC-02)', () => {
+  it('another event\'s block and threshold read as not found for every write, and nothing is written', async () => {
+    const { block, d60 } = await setup();
+    const other = await makeEvent();
+    await expect(addThreshold(other.id, block.id, '2026-09-01', 90)).rejects.toThrow('No such block');
+    await expect(reserve(other.id, block.id, { kind: 'attendee', guest: 'A', arriveOn: '2026-10-12', departOn: '2026-10-13' }, at('2026-07-01'))).rejects.toThrow('No such block');
+    await expect(decide(other.id, d60.id, 'accept', 0, at('2026-08-04'))).rejects.toThrow('No such threshold');
+    expect([await prisma.attritionThreshold.count(), await prisma.roomReservation.count(), await prisma.attritionDecision.count()]).toEqual([2, 0, 0]);
   });
 });

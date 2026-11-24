@@ -39,12 +39,12 @@ export default async function Contingency({ params, searchParams }: { params: Pr
   if (!board) notFound();
   const here = `/events/${eventId}/contingency`;
   const previewing = board.plans.find((p) => p.state !== 'decided' && p.branches.some((b) => b.id === previewId));
-  const preview = previewing && await previewBranch(previewing.id, previewId!);
+  const preview = previewing && await previewBranch(eventId, previewing.id, previewId!);
 
   async function doExecute(form: FormData) {
     'use server';
     const expected = JSON.parse(String(form.get('expected'))) as Moved[];
-    await refusable(here, () => executeBranch(String(form.get('planId')), String(form.get('branchId')), expected, systemClock), ContingencyRefused, CascadeChanged, CascadeBlocked, BudgetRefused);
+    await refusable(here, () => executeBranch(eventId, String(form.get('planId')), String(form.get('branchId')), expected, systemClock), ContingencyRefused, CascadeChanged, CascadeBlocked, BudgetRefused);
   }
   const sent = board.plans.flatMap((p) => p.escalations.map((e) => ({ ...e, title: p.title }))).sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
 
